@@ -970,5 +970,40 @@ class CDS:
         """Simple print function for backward compatibility."""
         print(self)
 
+    ###########################################################################
+
+    def print_payments_by_HH(self, value_dt, issuer_curve):
+        """We only print payments after the current valuation date"""
+        num_flows = len(self.payment_dts)
+        # cria a lista que vai receber os dados
+        texto = []
+        # cabecalho da tabela
+        texto.append(
+            "PAYMENT_dt      YEAR_FRAC      FLOW           DF       SURV_PROB      NPV"
+        )
+
+        for it in range(num_flows):
+            # dado do cupom
+            dt = self.payment_dts[it]
+            # se a data do cupom for maior que o value date, entao adiciona os dados
+            if dt > value_dt:
+                # fracao de ano
+                acc_factor = self.accrual_factors[it]
+                # fluxo financeiro?
+                flow = self.flows[it]
+                # discoun factor
+                z = issuer_curve.df(dt)
+                # survival probability
+                q = issuer_curve.survival_prob(dt)
+                # adiciona os dados na lista texto
+                texto.append(
+                    f"{str(dt):>15} {acc_factor:>10.6f} {flow:>12.2f} {z:>12.6f} {q:>12.6f} {flow * z * q:>12.2f}"
+                    # OLD format:
+                    # "%15s %10.6f %12.2f %12.6f %12.6f %12.2f"
+                    # % (dt, acc_factor, flow, z, q, flow * z * q)
+                )
+        # retorna a tabela com os dados de cada fluxo do CDS
+        return texto
+
 
 ########################################################################################

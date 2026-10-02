@@ -5,8 +5,8 @@
 
 from numbers import Real
 
-from financepy.utils.error import FinError
-from financepy.utils.currency import CurrencyTypes
+from .error import FinError
+from .currency import CurrencyTypes
 
 
 class Amount:
@@ -27,10 +27,7 @@ class Amount:
         self.currency_type = currency_type
 
     def __repr__(self):
-        return (
-            f"{self.currency_type.name} "
-            f"{self.amount:,.2f}"
-        )
+        return f"{self.currency_type.name} " f"{self.amount:,.2f}"
 
     def __float__(self):
         return self.amount
@@ -98,13 +95,8 @@ class Amount:
         if not isinstance(other, Amount):
             return False
 
-        return (
-            self.currency_type == other.currency_type
-            and self.amount == other.amount
-        )
+        return self.currency_type == other.currency_type and self.amount == other.amount
 
     def _check_currency(self, other):
         if self.currency_type != other.currency_type:
-            raise FinError(
-                "Cannot combine amounts with different currencies."
-            )
+            raise FinError("Cannot combine amounts with different currencies.")
