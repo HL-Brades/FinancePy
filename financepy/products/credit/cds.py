@@ -239,6 +239,46 @@ class CDS:
 
         return (dirty_pv, clean_pv)
 
+    ### by HH ##################################################################
+
+    def value_by_HH(
+        self,
+        value_dt,
+        issuer_curve,
+        contract_recovery_rate,
+        pv01_method=0,
+        prot_method=0,
+        num_steps_per_year=GLOB_NUM_STEPS_PER_YEAR,
+    ):
+        """Valuation of a CDS contract on a specific valuation date given
+        an issuer curve and a contract recovery rate."""
+        # calcula a perna de protecao do CDS
+        prot_pv = self.prot_leg_pv_by_HH(
+            value_dt,
+            issuer_curve,
+            contract_recovery_rate,
+            num_steps_per_year,
+            prot_method,
+        )
+        # calcula a perna de premio do CDS
+        prm_pv = self.premium_leg_pv_by_HH(
+            value_dt,
+            issuer_curve,
+            contract_recovery_rate,
+        )
+        # verifica se eh uma compra (long) ou venda (short) de protecao
+        if self.long_protect:
+            omega = +1
+        else:
+            omega = -1
+
+        # calcula o PV sujo e o PV limpo do CDS
+        clean_pv = omega * (prot_pv - prm_pv)
+        dirty_pv = clean_pv + self.accrued_interest(value_dt)
+        # retorna os valores
+        return {"dirty_pv": dirty_pv, "clean_pv": clean_pv}
+        # return (dirty_pv, clean_pv)
+
     ###########################################################################
 
     def spread_dv01(
@@ -572,8 +612,7 @@ class CDS:
 
         # An existing contract may have protection which as of now started in the past
         # We need to ensure that looking forward the protection starts immediately
-        if t_eff < 0.0:
-            t_eff = 0.0
+        t_eff = max(t_eff, 0.0)
 
         t_mat = (self.maturity_dt - value_dt) / G_DAYS_IN_YEAR
 
@@ -592,6 +631,38 @@ class CDS:
         )
 
         return v * self.notional
+
+    ### by HH ##################################################################
+
+    def prot_leg_pv_by_HH(
+        self,
+        value_dt: Date,
+        issuer_curve: CDSCurve,
+        contract_recovery_rate: float = STANDARD_RECOVERY_RATE,
+        num_steps_per_year: int = GLOB_NUM_STEPS_PER_YEAR,
+        prot_method=0,
+    ):
+        """Calculates the protection leg PV of the CDS by calling into the
+        fast NUMBA code that has been defined above."""
+
+        teff = (self.step_in_dt - value_dt) / G_DAYS_IN_YEAR
+        t_mat = (self.maturity_dt - value_dt) / G_DAYS_IN_YEAR
+
+        libor_curve = issuer_curve.libor_curve
+
+        v = prot_leg_pv_numba(
+            teff,
+            t_mat,
+            libor_curve._times,
+            libor_curve._dfs,
+            issuer_curve._times,
+            issuer_curve._qs,
+            contract_recovery_rate,
+            num_steps_per_year,
+            prot_method,
+        )
+        # adicionar o accrual do cupom atual e retorna
+        return v * self.notional + self.accrued_interest(value_dt)
 
     ###########################################################################
 
@@ -674,6 +745,31 @@ class CDS:
         dirty_rpv01 = self.rpv01(value_dt, issuer_curve, pv01_method)[DIRTY]
         v = dirty_rpv01 * self.notional * self.running_cpn
         return v
+
+    ### by HH ##################################################################
+
+    def premium_leg_pv_by_HH(
+        self, value_dt: Date, issuer_curve: CDSCurve, pv01_method=0
+    ):
+        """Value of the premium leg of a CDS."""
+        num_flows = len(self.payment_dts)
+        soma_npv = 0.0
+        # para cada fluxo, traz a valor presente pela curva
+        for it in range(0, num_flows):
+            # dado do cupom
+            dt = self.payment_dts[it]
+            # se a data do cupom for maior que o value date, entao adiciona os dados
+            if dt > value_dt:
+                # cupom
+                flow = self.flows[it]
+                # discount factor
+                z = issuer_curve.df(dt)
+                # survival probability
+                q = issuer_curve.survival_prob(dt)
+                # adiciona os dados na lista texto
+                soma_npv += flow * z * q
+        # retorna o NPV total
+        return soma_npv
 
     ###########################################################################
 
@@ -970,7 +1066,7 @@ class CDS:
         """Simple print function for backward compatibility."""
         print(self)
 
-    ###########################################################################
+    ### by HH ##################################################################
 
     def print_payments_by_HH(self, value_dt, issuer_curve):
         """We only print payments after the current valuation date"""
