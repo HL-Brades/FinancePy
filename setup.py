@@ -5,7 +5,6 @@ import tomllib
 
 from setuptools import setup
 
-
 ROOT = Path(__file__).resolve().parent
 
 
@@ -18,7 +17,8 @@ def generate_init():
 
     build_dt = datetime.now().strftime("%d %b %Y at %H:%M")
 
-    contents = f'''\
+    contents = f"""\
+
 __version__ = "{version}"
 
 CR = "\\n"
@@ -26,17 +26,18 @@ S =  "#############################################################" + CR
 S += "#  FINANCEPY Version {version} - Built on {build_dt}  #" + CR
 S += "#  This software is distributed FREE AND WITHOUT WARRANTY   #" + CR
 S += "#  Report issues at https://github.com/domokane/FinancePy   #" + CR
+S += "#  modified by Hernan Lobert                                #" + CR
 S += "#############################################################"
 S += CR
 
 print(S)
-'''
+"""
 
     init_file = ROOT / "financepy" / "__init__.py"
     init_file.write_text(contents, encoding="utf-8")
 
     print(f"Generated {init_file}")
-    print(f"FinancePy version: {version}")
+    print(f"FinancePy version: {version} by HH")
     print(f"Build date/time:   {build_dt}")
 
 

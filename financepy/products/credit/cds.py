@@ -2,7 +2,7 @@
 # Copyright (C) 2018, 2019, 2020 Dominic O'Kane
 ##############################################################################
 
-from typing import Union
+# from typing import Union
 
 from copy import deepcopy
 import numpy as np
@@ -49,7 +49,8 @@ class CDS:
     def __init__(
         self,
         step_in_dt: Date,  # Date protection starts
-        maturity_dt_or_tenor: Union[Date, str],  # Date or tenor
+        # maturity_dt_or_tenor: Union[Date, str],  # Date or tenor
+        maturity_dt_or_tenor: Date | str,  # Date or tenor
         running_cpn: float,  # Annualised cpn on premium fee leg
         notional: float = ONE_MILLION,
         long_protect: bool = True,
@@ -75,21 +76,21 @@ class CDS:
         if step_in_dt > maturity_dt:
             raise FinError("Step in date after maturity date")
 
-        self.step_in_dt = step_in_dt
-        self.maturity_dt = maturity_dt
-        self.running_cpn = running_cpn
-        self.notional = notional
-        self.long_protect = long_protect
-        self.accrual_dc_type = accrual_dc_type
-        self.dg_type = dg_type
-        self.cal_type = cal_type
-        self.freq_type = freq_type
-        self.bd_type = bd_type
+        self.step_in_dt: Date = step_in_dt
+        self.maturity_dt: Date = maturity_dt
+        self.running_cpn: float = running_cpn
+        self.notional: float = notional
+        self.long_protect: bool = long_protect
+        self.accrual_dc_type: DayCountTypes = accrual_dc_type
+        self.dg_type: DateGenRuleTypes = dg_type
+        self.cal_type: CalendarTypes | list | tuple = cal_type
+        self.freq_type: FrequencyTypes = freq_type
+        self.bd_type: BusDayAdjustTypes = bd_type
 
         self._generate_adjusted_cds_payment_dts()
         self._calc_flows()
 
-    ####################################################################################
+    ###########################################################################
 
     def _generate_adjusted_cds_payment_dts(self):
         """Generate CDS payment dates which have been holiday adjusted."""
@@ -239,7 +240,7 @@ class CDS:
 
         return (dirty_pv, clean_pv)
 
-    ### by HH ##################################################################
+    # by HH ###################################################################
 
     def value_by_HH(
         self,
@@ -632,7 +633,7 @@ class CDS:
 
         return v * self.notional
 
-    ### by HH ##################################################################
+    # by HH ###################################################################
 
     def prot_leg_pv_by_HH(
         self,
@@ -746,7 +747,7 @@ class CDS:
         v = dirty_rpv01 * self.notional * self.running_cpn
         return v
 
-    ### by HH ##################################################################
+    # by HH ###################################################################
 
     def premium_leg_pv_by_HH(
         self, value_dt: Date, issuer_curve: CDSCurve, pv01_method=0
@@ -755,7 +756,7 @@ class CDS:
         num_flows = len(self.payment_dts)
         soma_npv = 0.0
         # para cada fluxo, traz a valor presente pela curva
-        for it in range(0, num_flows):
+        for it in range(num_flows):
             # dado do cupom
             dt = self.payment_dts[it]
             # se a data do cupom for maior que o value date, entao adiciona os dados
@@ -927,26 +928,35 @@ class CDS:
         horizon = t_mat - t_eff
 
         def _dirty_and_clean_pv(
-            spread_, rate_: float, curve_recovery_: float, contract_recovery_: float
+            spread_: float | np.ndarray,
+            rate_: float | np.ndarray,
+            curve_recovery_: float | np.ndarray,
+            contract_recovery_: float | np.ndarray,
         ):
             """Dirty and clean PV under flat spread/rate/recovery inputs.
 
             All arguments broadcast; returns arrays of the broadcast shape.
             """
-            hazard_rate = KAPPA * spread_ / (1.0 - curve_recovery_)
-            decay_rate = rate_ + hazard_rate
+            hazard_rate = np.asarray(
+                KAPPA * spread_ / (1.0 - curve_recovery_), dtype=float
+            )
+            decay_rate = np.asarray(rate_ + hazard_rate, dtype=float)
 
             # Risky annuity: integral of exp(-decay_rate * t) over
             # [t_eff, t_mat]. Written with expm1 so it is stable as
             # decay_rate -> 0, where it tends to the horizon length. The
             # zero-decay elements are masked out of the division and
             # replaced with the exact limit.
-            x = decay_rate * horizon
+            x = np.asarray(decay_rate * horizon, dtype=float)
             is_zero = x == 0.0
             safe_decay = np.where(is_zero, 1.0, decay_rate)
-            annuity_per_df = np.where(is_zero, horizon, -np.expm1(-x) / safe_decay)
+            annuity_per_df = np.asarray(
+                np.where(is_zero, horizon, -np.expm1(-x) / safe_decay), dtype=float
+            )
 
-            risky_annuity = np.exp(-decay_rate * t_eff) * annuity_per_df
+            risky_annuity = (
+                np.asarray(np.exp(-decay_rate * t_eff), dtype=float) * annuity_per_df
+            )
 
             rpv01_dirty = risky_annuity * KAPPA + delta
             rpv01_clean = risky_annuity * KAPPA
@@ -1016,7 +1026,7 @@ class CDS:
             "PAYMENT_DT      YEAR_FRAC      PAYMENT           DF       SURV_PROB      NPV"
         )
 
-        for it in range(0, num_flows):
+        for it in range(num_flows):
             dt = self.payment_dts[it]
 
             if dt > value_dt:
@@ -1025,9 +1035,48 @@ class CDS:
                 z = issuer_curve.df(dt)
                 q = issuer_curve.survival_prob(dt)
                 print(
-                    "%15s %10.6f %12.2f %12.6f %12.6f %12.2f"
-                    % (dt, acc_factor, flow, z, q, flow * z * q)
+                    f"{dt!s:>15} {acc_factor:>10.6f} {flow:>12.2f} "
+                    f"{z:>12.6f} {q:>12.6f} {flow * z * q:>12.2f}"
+                    # OLD format:
+                    # "%15s %10.6f %12.2f %12.6f %12.6f %12.2f"
+                    # % (dt, acc_factor, flow, z, q, flow * z * q)
                 )
+
+    # by HH ####################################################################
+
+    def print_payments_by_HH(self, value_dt: Date, issuer_curve: CDSCurve):
+        """We only print payments after the current valuation date"""
+        num_flows = len(self.payment_dts)
+        # cria a lista que vai receber os dados
+        texto = []
+        # cabecalho da tabela
+        texto.append(
+            "PAYMENT_dt      YEAR_FRAC      FLOW           DF       SURV_PROB      NPV"
+        )
+
+        for it in range(num_flows):
+            # dado do cupom
+            dt = self.payment_dts[it]
+            # se a data do cupom for maior que o value date, entao adiciona os dados
+            if dt > value_dt:
+                # fracao de ano
+                acc_factor = self.accrual_factors[it]
+                # fluxo financeiro?
+                flow = self.flows[it]
+                # discoun factor
+                z = issuer_curve.df(dt)
+                # survival probability
+                q = issuer_curve.survival_prob(dt)
+                # adiciona os dados na lista texto
+                texto.append(
+                    f"{dt!s:>15} {acc_factor:>10.6f} {flow:>12.2f} "
+                    f"{z:>12.6f} {q:>12.6f} {flow * z * q:>12.2f}"
+                    # OLD format:
+                    # "%15s %10.6f %12.2f %12.6f %12.6f %12.2f"
+                    # % (dt, acc_factor, flow, z, q, flow * z * q)
+                )
+        # retorna a tabela com os dados de cada fluxo do CDS
+        return texto
 
     ###########################################################################
 
@@ -1066,40 +1115,5 @@ class CDS:
         """Simple print function for backward compatibility."""
         print(self)
 
-    ### by HH ##################################################################
 
-    def print_payments_by_HH(self, value_dt, issuer_curve):
-        """We only print payments after the current valuation date"""
-        num_flows = len(self.payment_dts)
-        # cria a lista que vai receber os dados
-        texto = []
-        # cabecalho da tabela
-        texto.append(
-            "PAYMENT_dt      YEAR_FRAC      FLOW           DF       SURV_PROB      NPV"
-        )
-
-        for it in range(num_flows):
-            # dado do cupom
-            dt = self.payment_dts[it]
-            # se a data do cupom for maior que o value date, entao adiciona os dados
-            if dt > value_dt:
-                # fracao de ano
-                acc_factor = self.accrual_factors[it]
-                # fluxo financeiro?
-                flow = self.flows[it]
-                # discoun factor
-                z = issuer_curve.df(dt)
-                # survival probability
-                q = issuer_curve.survival_prob(dt)
-                # adiciona os dados na lista texto
-                texto.append(
-                    f"{str(dt):>15} {acc_factor:>10.6f} {flow:>12.2f} {z:>12.6f} {q:>12.6f} {flow * z * q:>12.2f}"
-                    # OLD format:
-                    # "%15s %10.6f %12.2f %12.6f %12.6f %12.2f"
-                    # % (dt, acc_factor, flow, z, q, flow * z * q)
-                )
-        # retorna a tabela com os dados de cada fluxo do CDS
-        return texto
-
-
-########################################################################################
+################################################################################

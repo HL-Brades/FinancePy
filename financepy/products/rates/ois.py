@@ -135,7 +135,9 @@ class OIS:
 
     ##########################################################################
 
-    def value(self, value_dt: Date, ois_curve: DiscountCurve, first_fixing_rate: float=None):
+    def value(
+        self, value_dt: Date, ois_curve: DiscountCurve, first_fixing_rate: float = None
+    ):
         """Value the interest rate swap on a value date given a single Ibor
         discount curve."""
 
@@ -143,7 +145,9 @@ class OIS:
 
         fixed_leg_value = self.fixed_leg.value(value_dt, ois_curve)
 
-        float_leg_value = self.float_leg.value(value_dt, ois_curve, ois_curve, first_fixing_rate)
+        float_leg_value = self.float_leg.value(
+            value_dt, ois_curve, ois_curve, first_fixing_rate
+        )
 
         value = fixed_leg_value + float_leg_value
         return value
@@ -162,7 +166,9 @@ class OIS:
 
     ###########################################################################
 
-    def swap_rate(self, value_dt: Date, ois_curve: DiscountCurve, first_fixing_rate: float=None):
+    def swap_rate(
+        self, value_dt: Date, ois_curve: DiscountCurve, first_fixing_rate: float = None
+    ):
         """Calculate the fixed leg cpn that makes the swap worth zero.
         If the valuation date is before the swap payments start then this
         is the forward swap rate as it starts in the future. The swap rate
@@ -172,7 +178,9 @@ class OIS:
 
         pv01 = self.pv01(value_dt, ois_curve)
 
-        float_leg_value = self.float_leg.value(value_dt, ois_curve, ois_curve, first_fixing_rate)
+        float_leg_value = self.float_leg.value(
+            value_dt, ois_curve, ois_curve, first_fixing_rate
+        )
 
         cpn = float_leg_value / pv01 / self.fixed_leg.notional
         return cpn
