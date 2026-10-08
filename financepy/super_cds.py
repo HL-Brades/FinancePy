@@ -161,6 +161,7 @@ def carrega_curva_mercado(linha_debug=1):
     OIS_swaps = []  # lista de todos os vertices da curva de swaps
     swapType = SwapTypes.PAY
     dcType = DayCountTypes.ACT_360  # THIRTY_E_360_ISDA
+    # dcType = DayCountTypes.THIRTY_E_360_ISDA
     fixedFreq = FrequencyTypes.ANNUAL  # SEMI_ANNUAL
     calendario = CalendarTypes.UNITED_STATES
     # vertices da curva de swap
@@ -330,14 +331,16 @@ def cds_single_name():
     trade_date = from_datetime(
         aba_cashflow_CDS.range((11, coluna)).options(dates=dt.date).value
     )
-    # t+1 do trade date
+    # t+1 do trade date = step-in date
     effective_date = trade_date.add_days(1)
+    # data de liquidação do CDS
+    settlement_date = trade_date.add_days(3)
     # recovery rate
     recovery_rate = aba_cashflow_CDS.range((22, coluna)).value
     # CDS Flat Spread negociado com o mercado - spread do CDS em percentual
     cds_flat_spread = aba_cashflow_CDS.range((17, coluna)).value / 10000
     # cria os vertices de CDS
-    cds6m = CDS(effective_date, "6M", cds_flat_spread)
+    cds6m = CDS(effective_date, "6M", cds_flat_spread)  # effective_date
     cds1y = CDS(effective_date, "1Y", cds_flat_spread)
     cds2y = CDS(effective_date, "2Y", cds_flat_spread)
     cds3y = CDS(effective_date, "3Y", cds_flat_spread)
@@ -360,11 +363,11 @@ def cds_single_name():
     # notional
     notional = aba_cashflow_CDS.range((6, coluna)).value
     # long protection?
-    long_protection = False  # True = compra CDS, False = vende CDS
+    long_protection = True  # True = compra CDS, False = vende CDS
     # contrato de CDS
     cds_contract = CDS(
         effective_date, maturity_date, running_coupon, notional, long_protection
-    )
+    )  # effective_date
     # mostra os dados do contrato de CDS criado acima
     linha_debug = ut.print_debug("debug", linha_debug, repr(cds_contract), verbal_debug)
     # mostra todos os dados da curva de CDS caso o debug seja verbal
@@ -409,6 +412,14 @@ def cds_single_name():
         "### cds_single_name - finalizado ###",
     )
     linha_debug += 1
+
+    # extras para teste
+    up_front = cds_contract.upfront(
+        trade_date, settlement_date, issuer_curve, recovery_rate
+    )
+    linha_debug = ut.print_debug(
+        "debug", linha_debug, f"up front: {up_front}", verbal_debug
+    )
 
 
 def f_premio_cds(

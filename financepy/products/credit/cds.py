@@ -457,8 +457,8 @@ class CDS:
         settle_dt: Date,
         issuer_curve: CDSCurve,
         contract_recovery_rate: float,
-        pv01_method=0,
-        prot_method=0,
+        pv01_method: int = 0,
+        prot_method: int = 0,
         num_steps_per_year: int = GLOB_NUM_STEPS_PER_YEAR,
     ):
         """Return clean percentage PV expressed on T+3 settlement date."""
