@@ -9,8 +9,8 @@ import numpy as np
 
 from ...utils.math import normcdf_vect  # normcdf_prime_vect
 
-from ...utils.global_vars import G_DAYS_IN_YEAR
 from ...utils.error import FinError
+from ...utils.helpers import option_years
 
 # from ...products.equity.EquityOption import FinOption
 from ...utils.date import Date
@@ -20,6 +20,17 @@ from ...models.black_scholes import BlackScholes
 from ...utils.helpers import check_argument_types
 from ...market.curves.discount_curve import DiscountCurve
 from ...models.model import Model
+
+
+def _standardized_distance(numerator, denominator):
+    """Divide by volatility time, using the deterministic zero-variance limit."""
+    numerator, denominator = np.broadcast_arrays(numerator, denominator)
+    result = np.zeros(numerator.shape, dtype=float)
+    np.divide(numerator, denominator, out=result, where=denominator != 0.0)
+    result = np.where((denominator == 0.0) & (numerator > 0.0), np.inf, result)
+    result = np.where((denominator == 0.0) & (numerator < 0.0), -np.inf, result)
+    return result
+
 
 class FXDoubleDigitalOption:
 
@@ -112,8 +123,8 @@ class FXDoubleDigitalOption:
 
         if isinstance(value_dt, Date):
             spot_dt = value_dt.add_weekdays(self.spot_days)
-            t_del = (self.delivery_dt - spot_dt) / G_DAYS_IN_YEAR
-            t_exp = (self.expiry_dt - value_dt) / G_DAYS_IN_YEAR
+            t_del = option_years(value_dt, self.delivery_dt)
+            t_exp = option_years(value_dt, self.expiry_dt)
         else:
             t_del = value_dt
             t_exp = t_del
@@ -149,14 +160,20 @@ class FXDoubleDigitalOption:
             den = volatility * np.sqrt(t_exp)
             v2 = volatility * volatility
             mu = r_d - r_f
-            lower_d2 = (ln_s0_k1 + (mu - v2 / 2.0) * t_del) / den
-            upper_d2 = (ln_s0_k2 + (mu - v2 / 2.0) * t_del) / den
+            lower_d2_num = ln_s0_k1 + (mu - v2 / 2.0) * t_exp
+            upper_d2_num = ln_s0_k2 + (mu - v2 / 2.0) * t_exp
+            lower_d2 = _standardized_distance(lower_d2_num, den)
+            upper_d2 = _standardized_distance(upper_d2_num, den)
 
             if self.prem_currency == self.for_name:
                 # One unit of foreign currency is an asset-or-nothing payoff: it is
                 # worth S0 exp(-r_f t) N(d1) in domestic currency, with d1 not d2.
-                lower_d1 = lower_d2 + den
-                upper_d1 = upper_d2 + den
+                lower_d1 = _standardized_distance(
+                    lower_d2_num + den**2, den
+                )
+                upper_d1 = _standardized_distance(
+                    upper_d2_num + den**2, den
+                )
                 lower_digital = s0 * for_df * normcdf_vect(-lower_d1)
                 upper_digital = s0 * for_df * normcdf_vect(-upper_d1)
             elif self.prem_currency == self.dom_name:

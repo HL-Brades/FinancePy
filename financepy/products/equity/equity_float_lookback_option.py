@@ -23,7 +23,6 @@ from ...models.model import Model
 ##########################################################################
 # TODO: Attempt control variate adjustment to monte carlo
 # TODO: Sobol for Monte Carlo
-# TODO: TIGHTEN UP LIMIT FOR W FROM 100
 # TODO: Vectorise the analytical pricing formula
 ##########################################################################
 
@@ -83,6 +82,9 @@ class EquityFloatLookbackOption(EquityOption):
         if volatility < 0.0:
             raise FinError("Volatility must be non-negative.")
 
+        if t_exp < 0.0:
+            raise FinError("Expiry date must be after value date.")
+
         r = discount_curve.zero_rate_cc(self.expiry_dt)
         q = dividend_curve.zero_rate_cc(self.expiry_dt)
 
@@ -99,6 +101,19 @@ class EquityFloatLookbackOption(EquityOption):
             smax = stock_min_max
             if smax < s0:
                 raise FinError("Smax must be greater than or equal to the stock price.")
+
+        if t_exp == 0.0:
+            if self.opt_type == OptionTypes.EUROPEAN_CALL:
+                return max(s0 - smin, 0.0)
+            return max(smax - s0, 0.0)
+
+        if volatility == 0.0:
+            terminal_stock = s0 * np.exp((r - q) * t_exp)
+            if self.opt_type == OptionTypes.EUROPEAN_CALL:
+                minimum = min(smin, s0, terminal_stock)
+                return np.exp(-r * t_exp) * (terminal_stock - minimum)
+            maximum = max(smax, s0, terminal_stock)
+            return np.exp(-r * t_exp) * (maximum - terminal_stock)
 
         if abs(r - q) < G_SMALL:
             q = r + G_SMALL
@@ -134,10 +149,10 @@ class EquityFloatLookbackOption(EquityOption):
 
             if smax == s0:
                 term = -normcdf(b1 - 2.0 * b * np.sqrt(t_exp) / v) + expbt * normcdf(b1)
-            elif s0 < smax and w > 100:
-                term = expbt * normcdf(b1)
             else:
-                term = (-((s0 / smax) ** (-w))) * normcdf(b1 - 2.0 * b * np.sqrt(t_exp) / v) + expbt * normcdf(b1)
+                # the power and the probability are combined in log space as either can over- or underflow
+                log_term = -w * np.log(s0 / smax) + log_ndtr(b1 - 2.0 * b * np.sqrt(t_exp) / v)
+                term = -np.exp(log_term) + expbt * normcdf(b1)
 
             v = smax * df * normcdf(-b2) - s0 * dq * normcdf(-b1) + s0 * df * u * term
 

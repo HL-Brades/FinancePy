@@ -11,6 +11,7 @@ from ...utils.math import normcdf_vect  # normcdf_prime_vect
 
 from ...utils.global_vars import G_DAYS_IN_YEAR
 from ...utils.error import FinError
+from ...utils.helpers import option_years
 
 from ...utils.date import Date
 
@@ -21,6 +22,17 @@ from ...utils.check_values import check_curve_dt
 from ...models.black_scholes import BlackScholes
 from ...models.model import Model
 from ...market.curves.discount_curve import DiscountCurve
+
+
+def _standardized_distance(numerator, denominator):
+    """Divide by volatility time, using the deterministic zero-variance limit."""
+    numerator, denominator = np.broadcast_arrays(numerator, denominator)
+    result = np.zeros(numerator.shape, dtype=float)
+    np.divide(numerator, denominator, out=result, where=denominator != 0.0)
+    result = np.where((denominator == 0.0) & (numerator > 0.0), np.inf, result)
+    result = np.where((denominator == 0.0) & (numerator < 0.0), -np.inf, result)
+    return result
+
 
 ########################################################################################
 
@@ -108,8 +120,8 @@ class FXDigitalOption:
 
         if isinstance(value_dt, Date):
             spot_dt = value_dt.add_weekdays(self.spot_days)
-            t_del = (self.delivery_dt - spot_dt) / G_DAYS_IN_YEAR
-            t_exp = (self.expiry_dt - value_dt) / G_DAYS_IN_YEAR
+            t_del = option_years(value_dt, self.delivery_dt)
+            t_exp = option_years(value_dt, self.expiry_dt)
         else:
             t_del = value_dt
             t_exp = t_del
@@ -129,13 +141,20 @@ class FXDigitalOption:
         if not isinstance(model, BlackScholes):
             raise FinError("Model must be BlackScholes.")
 
-        f = spot_fx_rate * for_df / dom_df
+        # The time floor above is only for curve evaluation; at expiry the
+        # event is determined by spot, with no forward drift.
+        if t_exp == 0.0:
+            f = spot_fx_rate
+        else:
+            f = spot_fx_rate * for_df / dom_df
         k = self.strike_fx_rate
         v = model.volatility
         vol_sqrt_t = v * np.sqrt(t_exp)
 
-        d1 = (np.log(f / k) + 0.5 * (v**2) * t_exp) / vol_sqrt_t
-        d2 = d1 - vol_sqrt_t
+        d1_numerator = np.log(f / k) + 0.5 * (v**2) * t_exp
+        d2_numerator = d1_numerator - (v**2) * t_exp
+        d1 = _standardized_distance(d1_numerator, vol_sqrt_t)
+        d2 = _standardized_distance(d2_numerator, vol_sqrt_t)
 
         if self.opt_type == OptionTypes.DIGITAL_CALL and self.for_name == self.prem_currency:
             v = spot_fx_rate * for_df * normcdf_vect(d1)
@@ -195,19 +214,8 @@ class FXDigitalOption:
 
         spot_dt = value_dt.add_weekdays(self.spot_days)
 
-        t_del = (
-            self.delivery_dt - spot_dt
-        ) / G_DAYS_IN_YEAR
-
-        t_exp = (
-            self.expiry_dt - value_dt
-        ) / G_DAYS_IN_YEAR
-
-        if t_exp < 0.0:
-            raise FinError("Option time to expiry is less than zero.")
-
-        if t_del < 0.0:
-            raise FinError("Option time to delivery is less than zero.")
+        t_del = option_years(spot_dt, self.delivery_dt)
+        t_exp = option_years(spot_dt, self.expiry_dt)
 
         # ------------------------------------------------------------------
         # Market parameters
@@ -216,10 +224,9 @@ class FXDigitalOption:
         t = max(t_exp, 1.0e-10)
 
         dom_df = domestic_curve.df_t(t)
-        for_df = foreign_curve.df_t(t)
 
-        r_d = -np.log(dom_df) / t
-        r_f = -np.log(for_df) / t
+        r_d = domestic_curve.zero_rate_cc(self.expiry_dt)
+        r_f = foreign_curve.zero_rate_cc(self.expiry_dt)
 
         mu = r_d - r_f
 

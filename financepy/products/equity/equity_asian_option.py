@@ -15,13 +15,14 @@ from ...utils.helpers import check_argument_types, label_to_string
 from ...utils.date import Date
 from ...market.curves.discount_curve import DiscountCurve
 
-from ...models.asian_option_mc import asian_value_mc_fast_cv_numba
-from ...models.asian_option_mc import asian_value_mc_fast_numba
-from ...models.asian_option_mc import asian_value_mc_numba
+from ...models.bs_asian_option_mc import asian_value_mc_fast_cv_numba
+from ...models.bs_asian_option_mc import asian_value_mc_fast_numba
+from ...models.bs_asian_option_mc import asian_value_mc_numba
+from ...models.bs_asian_option_mc import asian_value_mc_sobol
 
-from ...models.asian_option_bs import value_asian_curran
-from ...models.asian_option_bs import value_asian_turnbull_wakeman_discrete
-from ...models.asian_option_bs import value_asian_kemna_vorst_geometric
+from ...models.bs_asian_option import value_asian_curran
+from ...models.bs_asian_option import value_asian_turnbull_wakeman_discrete
+from ...models.bs_asian_option import value_asian_kemna_vorst_geometric
 from ...models.model import Model
 
 from ...utils.check_values import check_curve_dt
@@ -133,13 +134,13 @@ class EquityAsianOption(EquityOption):
         Note that the accrued average is only required if the value date is
         inside the averaging period for the option."""
 
+        t_exp = option_years(value_dt, self.expiry_dt)
+        t_avg = option_years(value_dt, self.start_averaging_date, fail=False)
+
         check_curve_dt(value_dt, discount_curve)
         check_curve_dt(value_dt, dividend_curve)
         check_stock_price(stock_price)
         check_volatility(model.volatility)
-
-        t_exp = option_years(value_dt, self.expiry_dt)
-        t_avg = option_years(value_dt, self.start_averaging_date, fail=False)
 
         r = discount_curve.zero_rate_cc(self.expiry_dt)
         q = dividend_curve.zero_rate_cc(self.expiry_dt)
@@ -175,20 +176,20 @@ class EquityAsianOption(EquityOption):
         model: Model,
         num_paths: int,
         seed: int,
-        accrued_average: float,
+        accrued_average: float = None,
     ) -> MCResult:
         """Monte Carlo valuation of the Asian Average option using standard
         Monte Carlo code enhanced by Numba. I have discontinued the use of this
         as it is both slow and has limited variance reduction."""
+
+        t_exp = option_years(value_dt, self.expiry_dt)
+        t_avg = option_years(value_dt, self.start_averaging_date, fail=False)
 
         check_curve_dt(value_dt, discount_curve)
         check_curve_dt(value_dt, dividend_curve)
         check_stock_price(stock_price)
         check_volatility(model.volatility)
         check_num_paths(num_paths)
-
-        t_exp = option_years(value_dt, self.expiry_dt)
-        t_avg = option_years(value_dt, self.start_averaging_date, fail=False)
 
         r = discount_curve.zero_rate_cc(self.expiry_dt)
         q = dividend_curve.zero_rate_cc(self.expiry_dt)
@@ -220,6 +221,45 @@ class EquityAsianOption(EquityOption):
 
     ####################################################################################
 
+    def value_mc_sobol(
+        self,
+        value_dt: Date,
+        stock_price: float,
+        discount_curve: DiscountCurve,
+        dividend_curve: DiscountCurve,
+        model: Model,
+        num_paths: int,
+        seed: int,
+        accrued_average: float = None,
+        num_scrambles: int = 8,
+    ) -> MCResult:
+        """Randomized Sobol/antithetic Asian option valuation.
+
+        Uses independent scrambled Sobol replications to estimate QMC
+        uncertainty. num_paths must equal 2 * num_scrambles * 2**m
+        with m >= 1, including antithetic paths. Does not alter the
+        pseudo-random Monte Carlo methods.
+        """
+        check_curve_dt(value_dt, discount_curve)
+        check_curve_dt(value_dt, dividend_curve)
+        check_stock_price(stock_price)
+        check_volatility(model.volatility)
+        check_num_paths(num_paths)
+
+        t_exp = option_years(value_dt, self.expiry_dt)
+        t_avg = option_years(value_dt, self.start_averaging_date, fail=False)
+        r = discount_curve.zero_rate_cc(self.expiry_dt)
+        q = dividend_curve.zero_rate_cc(self.expiry_dt)
+
+        v, e = asian_value_mc_sobol(
+            t_avg, t_exp, self.strike_price, self.num_obs_per_year,
+            self.opt_type.value, stock_price, r, q, model.volatility,
+            num_paths, seed, accrued_average, num_scrambles,
+        )
+        return MCResult(v, e)
+
+    ####################################################################################
+
     def value_mc_fast(
         self,
         value_dt: Date,
@@ -228,8 +268,8 @@ class EquityAsianOption(EquityOption):
         dividend_curve: DiscountCurve,
         model: Model,  # Model
         num_paths: int,  # Numpaths integer
-        seed,
-        accrued_average,
+        seed: int,
+        accrued_average: float = None,
     ) -> MCResult:
         """Monte Carlo valuation of the Asian Average option. This method uses
         a lot of Numpy vectorisation. It is also helped by Numba."""
@@ -279,10 +319,10 @@ class EquityAsianOption(EquityOption):
         stock_price: float,
         discount_curve: DiscountCurve,
         dividend_curve: DiscountCurve,
-        model: Model,  # Model
-        num_paths: int,  # Numpaths integer
-        seed,
-        accrued_average,
+        model: Model,
+        num_paths: int,
+        seed: int,
+        accrued_average: float = None,
     ) -> MCResult:
         """Monte Carlo valuation of the Asian Average option using a control
         variate method that improves accuracy and reduces the variance of the

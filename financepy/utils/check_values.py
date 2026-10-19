@@ -2,11 +2,45 @@ import numpy as np
 
 
 from .date import Date
-from .global_vars import G_DAYS_IN_YEAR
 from .error import FinError
+from .currency import g_ccy_names
 
 ###########################################################################
 # Validation for specific input types that handles arrays and scalars
+###########################################################################
+
+
+def check_currency(ccy_name: str) -> None:
+    """Check that a currency code is supported."""
+
+    ccy_name = ccy_name.upper()
+
+    if len(ccy_name) != 3:
+        raise FinError("Currency code must be a three letter code")
+
+    if ccy_name not in g_ccy_names:
+        raise FinError(f"Unsupported currency: {ccy_name}")
+
+###########################################################################
+
+
+def check_currency_pair(ccy_pair: str) -> None:
+    """Check that an FX currency pair contains two valid currencies."""
+
+    ccy_pair = ccy_pair.upper()
+
+    if len(ccy_pair) != 6:
+        raise FinError("Currency pair must contain six letters.")
+
+    ccy_1 = ccy_pair[:3]
+    ccy_2 = ccy_pair[3:]
+
+    check_currency(ccy_1)
+    check_currency(ccy_2)
+
+    if ccy_1 == ccy_2:
+        raise FinError("Currencies in pair must be different.")
+
 ###########################################################################
 
 
@@ -33,40 +67,6 @@ def check_num_paths(num_paths: int):
         )
 
 ###########################################################################
-
-
-def check_t_exp(value_dt: Date, expiry_dt: Date):
-    """Calculate time to expiry in years."""
-
-    if not isinstance(value_dt, Date):
-        raise FinError("Valuation date must be a Date.")
-
-    if isinstance(expiry_dt, Date):
-
-        t_exp = (expiry_dt - value_dt) / G_DAYS_IN_YEAR
-
-        if t_exp < 0.0:
-            raise FinError("Expiry date falls before valuation date.")
-
-        return t_exp
-
-    elif isinstance(expiry_dt, list):
-
-        t_exps = []
-
-        for exp_dt in expiry_dt:
-            t_exp = check_t_exp(value_dt, exp_dt)
-
-            t_exps.append(t_exp)
-
-        return np.array(t_exps)
-
-    else:
-
-        raise FinError("Expiry date must be a Date or list of Dates.")
-
-
-########################################################################################
 
 
 def check_stock_price(stock_price: float):
