@@ -272,7 +272,8 @@ def carrega_curva_mercado(linha_debug=1):
 
     # serializa e grava a curva de juros na planilha para ser usada em outros calculos
     aba_USD_ISDA_OIS["data_curva_juros_ISDA"].value = data_curva_juros
-    aba_USD_ISDA_OIS["curva_juros_ISDA"].value = cloudpickle.dumps(curva_OIS)
+    aba_USD_ISDA_OIS["curva_juros_ISDA"].value = "c:\python\financepy\curva_ois.bin"
+    cloudpickle_dump_verif(aba_USD_ISDA_OIS["curva_juros_ISDA"].value, curva_OIS)
 
     # retorna a curva de juros e a linha de debug
     return curva_OIS, data_curva_juros, linha_debug
@@ -304,7 +305,7 @@ def cds_single_name():
     data_curva_juros = (
         aba_USD_ISDA_OIS["data_curva_juros_ISDA"].options(dates=dt.datetime).value
     )
-    curva_OIS = ut.cloudpickle_loads_verif(aba_USD_ISDA_OIS["curva_juros_ISDA"].value)
+    curva_OIS = ut.cloudpickle_load_verif(aba_USD_ISDA_OIS["curva_juros_ISDA"].value)
 
     # variaveis da funcao
     coluna = 0

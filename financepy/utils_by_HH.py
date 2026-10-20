@@ -155,9 +155,32 @@ def media_ponderada(valor1, valor2, peso1, peso2):
 """ Funcoes de serializacao e deserializacao """
 
 
-def cloudpickle_loads_verif(serial_string):
+# deserializa os dados do arquivo desejado verificando se este existe e se estiver vazio
+# retorna None
+def cloudpickle_load_verif(nome_arquivo):
     # verifica se a serial_string eh None ou nao
-    if serial_string is None:
+    if nome_arquivo is None:
         return None
     else:
-        return cloudpickle.loads(serial_string)
+        # read from file
+        with open(nome_arquivo, "rb") as f:
+            serial_string = cloudpickle.load(f)
+        if serial_string is None or serial_string == "":
+            return None
+        else:
+            return serial_string
+        # return cloudpickle.loads(serial_string)
+
+
+def cloudpickle_dump_verif(nome_arquivo, dados) -> bool:
+    # retorno padrao
+    retorno = False
+    # verifica se tem todas as infromacoes necessarias
+    if nome_arquivo is None or dados is None:
+        retorno = False
+    else:
+        # write bytes to file
+        with open(nome_arquivo, "wb") as f:
+            cloudpickle.dump(dados, f)
+        retorno = True
+    return retorno
