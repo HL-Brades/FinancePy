@@ -38,6 +38,7 @@ KAPPA = 365.0 / 360.0
         float64[:],
         float64[:],
         int64,
+        int64,
     ),
     fastmath=True,
     cache=True,
@@ -52,11 +53,12 @@ def risky_pv01_numba(
     np_surv_times,
     np_surv_values,
     pv01_method,
+    survival_interp_method,
 ):
     """Fast calculation of the risky PV01 of a CDS using NUMBA.
     The output is a numpy array of the full and clean risky PV01."""
 
-    method = InterpTypes.FLAT_FWD_RATES.value
+    discount_method = InterpTypes.FLAT_FWD_RATES.value
     debug = False
 
     if debug:
@@ -74,11 +76,14 @@ def risky_pv01_numba(
     # accrued is treated as though on average default occurs roughly midway
     # through a cpn period.
 
-    # if there is only one cash flow then we don't need to interpolate the survival probability and discount
-    # factor for the first cash flow
+    # A single cash flow still requires interpolation at its payment time.
     if payment_times.size == 1:
-        q1 = np_surv_values[0]
-        z1 = np_ibor_values[0]
+        q1 = _uinterpolate(
+            payment_times[0], np_surv_times, np_surv_values, survival_interp_method
+        )
+        z1 = _uinterpolate(
+            payment_times[0], np_ibor_times, np_ibor_values, discount_method
+        )
         dirty_rpv01 = q1 * z1 * year_fracs[0]
         clean_rpv01 = dirty_rpv01 - accrual_factor_pcd_to_now
 
@@ -89,8 +94,10 @@ def risky_pv01_numba(
 
         # The first cpn is a special case which needs to be handled carefully
         # taking into account what cpn has already accrued and what has not
-        q1 = _uinterpolate(t_ncd, np_surv_times, np_surv_values, method)
-        z1 = _uinterpolate(t_ncd, np_ibor_times, np_ibor_values, method)
+        q1 = _uinterpolate(
+            t_ncd, np_surv_times, np_surv_values, survival_interp_method
+        )
+        z1 = _uinterpolate(t_ncd, np_ibor_times, np_ibor_values, discount_method)
 
         # this is the part of the cpn accrued from previous cpn date to now
         # accrual_factor_pcd_to_now = day_count.year_frac(pcd,teff)
@@ -99,7 +106,9 @@ def risky_pv01_numba(
 
         # cpn accrued from previous cpn to today paid in full at default
         # before cpn payment
-        qeff = _uinterpolate(t_eff, np_surv_times, np_surv_values, method)
+        qeff = _uinterpolate(
+            t_eff, np_surv_times, np_surv_values, survival_interp_method
+        )
         dq = qeff - q1
         dirty_rpv01 += z1 * dq * accrual_factor_pcd_to_now * cpn_accd_indicator
 
@@ -115,8 +124,10 @@ def risky_pv01_numba(
 
         for it in range(1, len(payment_times)):
             t2 = payment_times[it]
-            q2 = _uinterpolate(t2, np_surv_times, np_surv_values, method)
-            z2 = _uinterpolate(t2, np_ibor_times, np_ibor_values, method)
+            q2 = _uinterpolate(
+                t2, np_surv_times, np_surv_values, survival_interp_method
+            )
+            z2 = _uinterpolate(t2, np_ibor_times, np_ibor_values, discount_method)
             accrual_factor = year_fracs[it]
             # full cpn is paid at the end of the current period if survives
             dirty_rpv01 += q2 * z2 * accrual_factor
@@ -178,6 +189,7 @@ def risky_pv01_numba(
         float64,
         int64,
         int64,
+        int64,
     ),
     fastmath=True,
     cache=True,
@@ -192,6 +204,7 @@ def prot_leg_pv_numba(
     contract_recovery_rate,
     num_steps_per_year,
     prot_method,
+    survival_interp_method,
 ):
     """Fast calculation of the CDS protection leg PV using NUMBA to speed up
     the numerical integration over time."""
@@ -199,14 +212,14 @@ def prot_leg_pv_numba(
     if t_eff < 0.0:
         raise FinError("Error: Protection leg starts in past: t_eff < 0")
 
-    method = InterpTypes.FLAT_FWD_RATES.value
+    discount_method = InterpTypes.FLAT_FWD_RATES.value
     dt = 1.0 / num_steps_per_year
     num_steps = int((t_mat - t_eff) * num_steps_per_year + 0.50)
     dt = (t_mat - t_eff) / num_steps
 
     t = t_eff
-    z1 = _uinterpolate(t, np_ibor_times, np_ibor_values, method)
-    q1 = _uinterpolate(t, np_surv_times, np_surv_values, method)
+    z1 = _uinterpolate(t, np_ibor_times, np_ibor_values, discount_method)
+    q1 = _uinterpolate(t, np_surv_times, np_surv_values, survival_interp_method)
 
     prot_pv = 0.0
     small = 1e-8
@@ -218,8 +231,10 @@ def prot_leg_pv_numba(
 
         for _ in range(num_steps):
             t = t + dt
-            z2 = _uinterpolate(t, np_ibor_times, np_ibor_values, method)
-            q2 = _uinterpolate(t, np_surv_times, np_surv_values, method)
+            z2 = _uinterpolate(t, np_ibor_times, np_ibor_values, discount_method)
+            q2 = _uinterpolate(
+                t, np_surv_times, np_surv_values, survival_interp_method
+            )
 
             log_z2 = np.log(z2)
             log_q2 = np.log(q2)
@@ -242,8 +257,10 @@ def prot_leg_pv_numba(
 
         for _ in range(num_steps):
             t += dt
-            z2 = _uinterpolate(t, np_ibor_times, np_ibor_values, method)
-            q2 = _uinterpolate(t, np_surv_times, np_surv_values, method)
+            z2 = _uinterpolate(t, np_ibor_times, np_ibor_values, discount_method)
+            q2 = _uinterpolate(
+                t, np_surv_times, np_surv_values, survival_interp_method
+            )
             dq = q1 - q2
             dprot_pv = 0.5 * (z1 + z2) * dq
             prot_pv += dprot_pv

@@ -126,7 +126,8 @@ class CDS:
         # We generate unadjusted dates - not adjusted for weekends or holidays
         unadjusted_schedule_dts = []
 
-        ## if the frequency is zero or negative, we set the last date to be the start date
+        # =======
+        # if the frequency is zero or negative, we set the last date to be the start date
         if frequency == 0:
             # last date
             unadjusted_schedule_dts.append(self.maturity_dt)
@@ -143,7 +144,8 @@ class CDS:
                 adjusted = calendar.adjust(date, self.bd_type)
                 adjusted_dts.append(adjusted)
 
-        ## standard CDS rule - backward generation of dates from maturity to start date
+        # =======
+        # standard CDS rule - backward generation of dates from maturity to start date
         elif self.dg_type == DateGenRuleTypes.BACKWARD:
 
             # We start at end date and step backwards
@@ -175,7 +177,8 @@ class CDS:
         # Acc Start = [22-DEC-2008, 20-MAR-2009, 22-JUN-2009, 21-SEP-2009, 21-DEC-2009]
         # Acc End   = [19-MAR-2009, 21-JUN-2009, 20-SEP-2009, 20-DEC-2009, 20-MAR-2010]
 
-        ## forward CDS rule
+        # =======
+        # forward CDS rule
         elif self.dg_type == DateGenRuleTypes.FORWARD:
 
             # We start at start date and step forwards
@@ -206,7 +209,8 @@ class CDS:
         # Accrual Start = [20-FEB-2009, 20-MAY-2009, 20-AUG-2009, 20-NOV-2009]
         # Accrual End   = [19-MAY-2009, 19-AUG-2009, 19-NOV-2009, 20-MAR-2010]
 
-        ## no rule was given, so we raise an error
+        # =======
+        # no rule was given, so we raise an error
         else:
             raise FinError("Unknown DATE_GEN_RULEType:" + str(self.dg_type))
 
@@ -699,6 +703,7 @@ class CDS:
             contract_recovery_rate,
             num_steps_per_year,
             prot_method,
+            issuer_curve.interp_method.value,
         )
 
         return v * self.notional
@@ -799,6 +804,7 @@ class CDS:
             issuer_curve._times,
             issuer_curve._qs,
             pv01_method,
+            issuer_curve.interp_method.value,
         )
 
         dirty_rpv01 = value_rpv01[DIRTY]

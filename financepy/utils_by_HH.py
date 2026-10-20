@@ -1,6 +1,9 @@
+#
 # Funcoes uteis para o projeto
-# Autor: Hernan Lobert
-# Data: 2023-10-02
+# @author: Hernan Lobert
+# Created on oct/2023
+# updated on set/2026
+
 
 """import the packages that we'll use"""
 
@@ -17,11 +20,14 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 
+# serializer
+import cloudpickle
+
 """ Funcoes de debug """
 
 
 def print_debug(nome_aba: str, linha: int, texto: str, verbal: bool = True) -> int:
-    """Imprime o texto na aba e linha passadas (sempre na primeira coluna = A:A). 
+    """Imprime o texto na aba e linha passadas (sempre na primeira coluna = A:A).
     Retorna linha+1."""
     # verifica se eh para escrever a mensagem
     if verbal:
@@ -48,7 +54,9 @@ def teste_de_conexao():
     aba_debug = "debug"
     linha_debug = print_debug(aba_debug, 1, "### Iniciando teste de conexao ###")
     # mostra o nome da planilha chamando
-    linha_debug = print_debug(aba_debug, linha_debug, f"Link do book: {xw.Book.caller()}")
+    linha_debug = print_debug(
+        aba_debug, linha_debug, f"Link do book: {xw.Book.caller()}"
+    )
     # mostra o nome da aba de 'debug'
     linha_debug = print_debug(
         aba_debug,
@@ -142,3 +150,14 @@ def media_ponderada(valor1, valor2, peso1, peso2):
     temp = temp / (peso1 + peso2)
     # temp = np.average([valor1, valor2], weights=[peso1, peso2])
     return temp
+
+
+""" Funcoes de serializacao e deserializacao """
+
+
+def cloudpickle_loads_verif(serial_string):
+    # verifica se a serial_string eh None ou nao
+    if serial_string is None:
+        return None
+    else:
+        return cloudpickle.loads(serial_string)

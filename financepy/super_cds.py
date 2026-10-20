@@ -1,6 +1,7 @@
 #!/usr/bin/env python .
 
 #
+# Funcoes que pega os dados do Excel e calcula o CDS
 # Created on June/2025
 # updated on set/2026
 # @author: Hernan Lobert
@@ -26,7 +27,8 @@ import scipy.optimize as opt
 import xlwings as xw
 
 # uteis
-from . import utils_by_HH as ut
+from . import utils_by_hh as ut
+import cloudpickle
 
 # financial functions
 from .market.curves.interpolator import InterpTypes
@@ -44,8 +46,6 @@ from .utils.calendar import CalendarTypes  # , Calendar
 
 # swap functions
 from .products.rates.ibor_swap import SwapTypes
-
-# from .products.rates.ibor_swap import IborSwap, SwapTypes
 from .products.rates.ois import OIS
 from .products.rates.ois_curve import OISCurve
 from .products.rates.ibor_deposit import IborDeposit
@@ -68,9 +68,9 @@ from .products.rates.ibor_deposit import IborDeposit
 
 """ global variables """
 # curva de juros
-curva_OIS = None  # OISCurve
+# curva_OIS = None  # OISCurve
 # data e hora da curva de juros
-data_curva_juros: Date | None = None  # dt.datetime
+# data_curva_juros: dt.datetime | None = None  # dt.datetime
 # define o modo de debug
 verbal_debug = (
     None  # True = mostra todas as informacoes, False = mostra poucas informacoes
@@ -108,134 +108,153 @@ def carrega_curva_mercado(linha_debug=1):
             "debug", linha_debug, f"   verbal_debug? {verbal_debug}"
         )
 
-    """Calcula a curva de CDS para um unico nome"""
-    # data de inicio do swap
-    trade_date = from_datetime(
-        aba_USD_ISDA_OIS["trade_date"].options(dates=dt.date).value
+    # Carrega os dados que estao na planilha. Se forem mais velhos do que 15 minutos, atualiza toda a curva
+    data_curva_juros = (
+        aba_USD_ISDA_OIS["data_curva_juros_ISDA"].options(dates=dt.datetime).value
     )
-    settlementDate = from_datetime(
-        aba_USD_ISDA_OIS["data_settlement_swap"].options(dates=dt.date).value
-    )
+    curva_OIS = ut.cloudpickle_loads_verif(aba_USD_ISDA_OIS["curva_juros_ISDA"].value)
+    # verifica se uma das variaveis esta None. Se estiver coloca uma data antiga
+    if curva_OIS is None or data_curva_juros is None:
+        # neste caso, coloca hoje menos 30 dias
+        data_curva_juros = dt.datetime.now(tz=dt.timezone.utc) - dt.timedelta(days=30)
 
-    """Deposits"""
-    linha_debug = ut.print_debug("debug", linha_debug, "   adicionando os deposits")
-    OISdeposits = []  # lista de todos os vertices da curva de deposits
-    depoDCCType = DayCountTypes.ACT_360
-    calendario = CalendarTypes.UNITED_STATES
-    # vertices da curva de swap
-    range_data = aba_USD_ISDA_OIS["deposit_maturity"].options(dates=dt.date).value
-    range_taxa = aba_USD_ISDA_OIS["deposit_taxa"].value
-    # adiciona todos os dados dos deposits
-    for i in range(len(range_data)):
-        if range_data[i] is None or range_taxa[i] is None:
-            # pula se nao tem data ou taxa
-            linha_debug = ut.print_debug(
-                "debug",
-                linha_debug,
-                f"   pulando linha {i + 1} - data: {range_data[i]} taxa: {range_taxa[i]}",
-                verbal_debug,
-            )
-        else:
-            # info do vertice
-            linha_debug = ut.print_debug(
-                "debug",
-                linha_debug,
-                f"   adicionando linha {i + 1} - "
-                + f"data: {from_datetime(range_data[i])} taxa: {range_taxa[i]}",
-            )
-            # adiciona o vertice de deposit
-            deposit = IborDeposit(
-                trade_date,
-                from_datetime(range_data[i]),
-                range_taxa[i],
-                depoDCCType,
-                cal_type=calendario,
-            )
-            # retorna a variavel do deposit
-            linha_debug = ut.print_debug(
-                "debug", linha_debug, repr(deposit), verbal_debug
-            )
-            # adiciona o deposit a lista de deposits
-            OISdeposits.append(deposit)
+    # se a curva tem mais de 15 minutos atualiza toda a curva
+    if data_curva_juros < dt.datetime.now(tz=dt.timezone.utc) - dt.timedelta(
+        minutes=15
+    ):
+        """pega as datass necessarias para a curva"""
+        # data de inicio do swap
+        trade_date = from_datetime(
+            aba_USD_ISDA_OIS["trade_date"].options(dates=dt.date).value
+        )
+        # data de liquidacao inicial do swap e deposit
+        settlementDate = from_datetime(
+            aba_USD_ISDA_OIS["data_settlement_swap"].options(dates=dt.date).value
+        )
 
-    """OIS Swaps"""
-    linha_debug = ut.print_debug("debug", linha_debug, "   adicionanado os swaps")
-    OIS_swaps = []  # lista de todos os vertices da curva de swaps
-    swapType = SwapTypes.PAY
-    dcType = DayCountTypes.ACT_360  # THIRTY_E_360_ISDA
-    # dcType = DayCountTypes.THIRTY_E_360_ISDA
-    fixedFreq = FrequencyTypes.ANNUAL  # SEMI_ANNUAL
-    calendario = CalendarTypes.UNITED_STATES
-    # vertices da curva de swap
-    range_data = aba_USD_ISDA_OIS["swap_maturity"].options(dates=dt.date).value
-    range_taxa = aba_USD_ISDA_OIS["swap_taxa"].value
-    # verifica se tem dados
-    linha_debug = ut.print_debug(
-        "debug",
-        linha_debug,
-        "   Rno de datas: "
-        + str(len(range_data))
-        + " Rno de taxas: "
-        + str(len(range_taxa)),
-        verbal_debug,
-    )
-    # adiciona todos os dados dos swaps
-    for i in range(len(range_taxa)):
-        if range_data[i] is None or range_taxa[i] is None:
-            # pula se nao tem data ou taxa
-            linha_debug = ut.print_debug(
-                "debug",
-                linha_debug,
-                f"   pulando linha {i + 1} - data: {range_data[i]} taxa: {range_taxa[i]}",
-                verbal_debug,
-            )
-        else:
-            # info do vertice
-            linha_debug = ut.print_debug(
-                "debug",
-                linha_debug,
-                f"   adicionando linha {i + 1} - "
-                + f"data: {from_datetime(range_data[i])} taxa: {range_taxa[i]}",
-                verbal_debug,
-            )
-            # adiciona o vertice de swap
-            swap = OIS(
-                settlementDate,
-                from_datetime(range_data[i]),
-                swapType,
-                range_taxa[i],
-                fixedFreq,
-                dcType,
-                1e6,
-                2,
-                0.0,
-                fixedFreq,
-                dcType,
-                calendario,
-            )
-            # retorna a variavel do swap
-            linha_debug = ut.print_debug("debug", linha_debug, repr(swap), verbal_debug)
-            # adiciona o swap a lista de swaps
-            OIS_swaps.append(swap)
+        """Deposits"""
+        linha_debug = ut.print_debug("debug", linha_debug, "   adicionando os deposits")
+        OISdeposits = []  # lista de todos os vertices da curva de deposits
+        depoDCCType = DayCountTypes.ACT_360
+        calendario = CalendarTypes.UNITED_STATES
+        # vertices da curva de swap
+        range_data = aba_USD_ISDA_OIS["deposit_maturity"].options(dates=dt.date).value
+        range_taxa = aba_USD_ISDA_OIS["deposit_taxa"].value
+        # adiciona todos os dados dos deposits
+        for i in range(len(range_data)):
+            if range_data[i] is None or range_taxa[i] is None:
+                # pula se nao tem data ou taxa
+                linha_debug = ut.print_debug(
+                    "debug",
+                    linha_debug,
+                    f"   pulando linha {i + 1} - data: {range_data[i]} taxa: {range_taxa[i]}",
+                    verbal_debug,
+                )
+            else:
+                # info do vertice
+                linha_debug = ut.print_debug(
+                    "debug",
+                    linha_debug,
+                    f"   adicionando linha {i + 1} - "
+                    + f"data: {from_datetime(range_data[i])} taxa: {range_taxa[i]}",
+                )
+                # adiciona o vertice de deposit
+                deposit = IborDeposit(
+                    trade_date,
+                    from_datetime(range_data[i]),
+                    range_taxa[i],
+                    depoDCCType,
+                    cal_type=calendario,
+                )
+                # retorna a variavel do deposit
+                linha_debug = ut.print_debug(
+                    "debug", linha_debug, repr(deposit), verbal_debug
+                )
+                # adiciona o deposit a lista de deposits
+                OISdeposits.append(deposit)
 
-    """Monta a curva de juros"""
-    linha_debug = ut.print_debug("debug", linha_debug, "   montando a curva de juros")
-    # cria a curva de juros OIS so com a SOFR e os swaps
-    Interest_types = InterpTypes.FLAT_FWD_RATES
-    curva_OIS = OISCurve(trade_date, OISdeposits, [], OIS_swaps, Interest_types)
+        """OIS Swaps"""
+        linha_debug = ut.print_debug("debug", linha_debug, "   adicionanado os swaps")
+        OIS_swaps = []  # lista de todos os vertices da curva de swaps
+        swapType = SwapTypes.PAY
+        dcType = DayCountTypes.ACT_360  # THIRTY_E_360_ISDA
+        # dcType = DayCountTypes.THIRTY_E_360_ISDA
+        fixedFreq = FrequencyTypes.ANNUAL  # SEMI_ANNUAL
+        calendario = CalendarTypes.UNITED_STATES
+        # vertices da curva de swap
+        range_data = aba_USD_ISDA_OIS["swap_maturity"].options(dates=dt.date).value
+        range_taxa = aba_USD_ISDA_OIS["swap_taxa"].value
+        # verifica se tem dados
+        linha_debug = ut.print_debug(
+            "debug",
+            linha_debug,
+            "   Rno de datas: "
+            + str(len(range_data))
+            + " Rno de taxas: "
+            + str(len(range_taxa)),
+            verbal_debug,
+        )
+        # adiciona todos os dados dos swaps
+        for i in range(len(range_taxa)):
+            if range_data[i] is None or range_taxa[i] is None:
+                # pula se nao tem data ou taxa
+                linha_debug = ut.print_debug(
+                    "debug",
+                    linha_debug,
+                    f"   pulando linha {i + 1} - data: {range_data[i]} taxa: {range_taxa[i]}",
+                    verbal_debug,
+                )
+            else:
+                # info do vertice
+                linha_debug = ut.print_debug(
+                    "debug",
+                    linha_debug,
+                    f"   adicionando linha {i + 1} - "
+                    + f"data: {from_datetime(range_data[i])} taxa: {range_taxa[i]}",
+                    verbal_debug,
+                )
+                # adiciona o vertice de swap
+                swap = OIS(
+                    settlementDate,
+                    from_datetime(range_data[i]),
+                    swapType,
+                    range_taxa[i],
+                    fixedFreq,
+                    dcType,
+                    1e6,
+                    2,
+                    0.0,
+                    fixedFreq,
+                    dcType,
+                    calendario,
+                )
+                # retorna a variavel do swap
+                linha_debug = ut.print_debug(
+                    "debug", linha_debug, repr(swap), verbal_debug
+                )
+                # adiciona o swap a lista de swaps
+                OIS_swaps.append(swap)
 
-    # mostra no debug a variavel da curva de juros
-    # for swap in curva_OIS:
-    #    data = swap.maturity_dt  # data
-    #    df = curva_OIS.df(data) / curva_OIS.df(settlementDate)  # discount factor
-    #    ccZeroRate = curva_OIS.zero_rate(
-    #        data, FrequencyTypes.CONTINUOUS, DayCountTypes.ACT_360
-    #    )  # zero rate (bullet)
-    #    linha_debug = ut.print_debug(
-    #        "debug",
-    #        linha_debug,
-    #        f"{data:%d-%b-%Y}, {df:.8f}, {ccZeroRate*100:.6f}%"
-    #    )
+        """Monta a curva de juros"""
+        linha_debug = ut.print_debug(
+            "debug", linha_debug, "   montando a curva de juros"
+        )
+        # cria a curva de juros OIS so com a SOFR e os swaps
+        Interest_types = InterpTypes.FLAT_FWD_RATES
+        curva_OIS = OISCurve(trade_date, OISdeposits, [], OIS_swaps, Interest_types)
+
+        # mostra no debug a variavel da curva de juros
+        # for swap in curva_OIS:
+        #    data = swap.maturity_dt  # data
+        #    df = curva_OIS.df(data) / curva_OIS.df(settlementDate)  # discount factor
+        #    ccZeroRate = curva_OIS.zero_rate(
+        #        data, FrequencyTypes.CONTINUOUS, DayCountTypes.ACT_360
+        #    )  # zero rate (bullet)
+        #    linha_debug = ut.print_debug(
+        #        "debug",
+        #        linha_debug,
+        #        f"{data:%d-%b-%Y}, {df:.8f}, {ccZeroRate*100:.6f}%"
+        #    )
 
     # mostra a curva de juros no debug
     linha_debug = ut.print_debug("debug", linha_debug, repr(curva_OIS), verbal_debug)
@@ -245,14 +264,23 @@ def carrega_curva_mercado(linha_debug=1):
         ut.print_debug("debug", linha_debug + 1, "### curva de juros montada !!! ###")
         + 1
     )
+
     # marca a data que a curva de juros foi gerada
-    global data_curva_juros
+    # global data_curva_juros
     # atualiza a data da curva de juros
-    data_curva_juros = from_datetime(dt.datetime.now(tz=dt.timezone.utc))
+    data_curva_juros = dt.datetime.now(tz=dt.timezone.utc)
+
+    # serializa e grava a curva de juros na planilha para ser usada em outros calculos
+    aba_USD_ISDA_OIS["data_curva_juros_ISDA"].value = data_curva_juros
+    aba_USD_ISDA_OIS["curva_juros_ISDA"].value = cloudpickle.dumps(curva_OIS)
+
     # retorna a curva de juros e a linha de debug
     return curva_OIS, data_curva_juros, linha_debug
 
 
+# ==============================
+# Calcula um CDS single name
+# ==============================
 def cds_single_name():
     """Cria o contrato de CDS e calcula o premio do CDS"""
     # nome da aba Debug e inicializa a linha de debug
@@ -270,9 +298,14 @@ def cds_single_name():
         "debug", linha_debug, f"   verbal_debug? {verbal_debug}"
     )
 
-    """Carrega a curva de juros da ISDA"""
-    # forca o uso das variaveis globais
-    global curva_OIS, data_curva_juros
+    """ Carrega a curva de juros da ISDA """
+    # cria a variavel da tab da curva de juros OIS-ISDA
+    aba_USD_ISDA_OIS = rc_book.sheets["USD_ISDA_OIS"]
+    data_curva_juros = (
+        aba_USD_ISDA_OIS["data_curva_juros_ISDA"].options(dates=dt.datetime).value
+    )
+    curva_OIS = ut.cloudpickle_loads_verif(aba_USD_ISDA_OIS["curva_juros_ISDA"].value)
+
     # variaveis da funcao
     coluna = 0
     aba_cds = None
@@ -313,7 +346,7 @@ def cds_single_name():
             )
             # usa a curva de juros ja carregada
 
-    """Pega a coluna e nome da aba do CDS sendo calculado"""
+    """ Pega a coluna e nome da aba do CDS sendo calculado """
     coluna = int(rc_book.sheets["debug"].range("coluna_uma_CLN").value)
     if coluna == 0:
         coluna = 2  # se nao tiver definido, assume a coluna 2
@@ -328,7 +361,7 @@ def cds_single_name():
         "debug", linha_debug, f"aba_cashflow_CDS: {aba_cashflow_CDS} e coluna: {coluna}"
     )
 
-    """Calcula a curva de CDS para um unico nome"""
+    """ Calcula a curva de CDS para um unico nome """
     # Dados do CDS
     trade_date = from_datetime(
         aba_cashflow_CDS.range((11, coluna)).options(dates=dt.date).value
@@ -347,7 +380,7 @@ def cds_single_name():
         aba_cashflow_CDS.range((23, coluna)).options(dates=dt.date).value
     )
     # recovery rate
-    recovery_rate = aba_cashflow_CDS.range((24, coluna)).value
+    recovery_rate = aba_cashflow_CDS.range((25, coluna)).value
     # CDS Flat Spread negociado com o mercado - spread do CDS em percentual
     cds_flat_spread = aba_cashflow_CDS.range((17, coluna)).value / 10000
     # coupons' frequency - take the integer part of the value in the cell and convert to FrequencyTypes
@@ -396,56 +429,18 @@ def cds_single_name():
         accrual_dc_type=DayCountTypes.ACT_360,
         prev_coupon_dt=accrual_start_date,
     )
-    # Lista dos vertices de CDS
-    # cds_list = [cds6m, cds1y, cds2y, cds3y, cds4y, cds5y, cds7y, cds10y]
+
     # Curva do CDS
+    assert curva_OIS is not None
     issuer_curve = CDSCurve(
         trade_date,
-        # [cds3y, cds5y, cds7y, cds10y],
-        [cds10y],
+        [cds3y, cds5y, cds7y, cds10y],
         curva_OIS,
         recovery_rate,
         DayCountTypes.ACT_360,
         InterpTypes.FLAT_FWD_RATES,
     )
     linha_debug = ut.print_debug("debug", linha_debug, repr(issuer_curve), verbal_debug)
-
-    linha_debug = ut.print_debug(
-        "debug",
-        linha_debug,
-        f"issuer_curve.set_last_q: {issuer_curve.set_last_q}",
-        verbal_debug,
-    )
-    linha_debug = ut.print_debug("debug", linha_debug, repr(cds10y), verbal_debug)
-    linha_debug = ut.print_debug(
-        "debug",
-        linha_debug,
-        f"cds10y rpv01: {cds10y.rpv01(trade_date, issuer_curve)}",
-        verbal_debug,
-    )
-    # mostra todos os dados da curva de CDS caso o debug seja verbal
-    for dados in cds10y.print_payments_by_HH(
-        setp_in_date, issuer_curve, full_flow=True
-    ):
-        linha_debug = ut.print_debug("debug", linha_debug, dados, verbal_debug)
-    #
-    linha_debug = ut.print_debug(
-        "debug",
-        linha_debug,
-        f"issuer_curve._times: {issuer_curve._times}",
-        verbal_debug,
-    )
-    linha_debug = ut.print_debug(
-        "debug", linha_debug, f"issuer_curve._qs: {issuer_curve._qs}", verbal_debug
-    )
-
-    return
-    # HH
-    # HH
-    # HH
-    # HH
-    # HH
-    # HH
 
     """Cria o contrato de CDS"""
     # maturity date do CDS. Sempre 20 de junho ou dezembro de cada ano
@@ -699,8 +694,13 @@ def procura_preco_cds():
     )
 
     """Carrega a curva de juros da ISDA"""
-    # forca o uso das variaveis globais
-    global curva_OIS, data_curva_juros
+    # cria a variavel da tab da curva de juros OIS-ISDA
+    aba_USD_ISDA_OIS = rc_book.sheets["USD_ISDA_OIS"]
+    data_curva_juros = (
+        aba_USD_ISDA_OIS["data_curva_juros_ISDA"].options(dates=dt.datetime).value
+    )
+    curva_OIS = ut.cloudpickle_loads_verif(aba_USD_ISDA_OIS["curva_juros_ISDA"].value)
+
     # variaveis da funcao
     coluna = 0
     aba_cds = None
@@ -884,14 +884,18 @@ def procura_preco_cds():
 ##############
 def retorna_survival_probability():
     """Cria o contrato de CDS e retorna a probabilidade de sobrevivencia do CDS"""
-    # variaveis globais
-    global curva_OIS, data_curva_juros
     # nome da aba Debug e inicializa a linha de debug
     linha_debug = ut.print_debug("debug", 1, "### Calculando o CDS ###")
     # cria a variavel da planilha
     rc_book = xw.Book.caller()  # xw.Book(planilha)
     # cria a variavel da tab da curva de juros OIS-ISDA
     aba_cashflow_CDS = rc_book.sheets["Cashflow CDS"]
+    # cria a variavel da tab da curva de juros OIS-ISDA
+    aba_USD_ISDA_OIS = rc_book.sheets["USD_ISDA_OIS"]
+    data_curva_juros = (
+        aba_USD_ISDA_OIS["data_curva_juros_ISDA"].options(dates=dt.datetime).value
+    )
+    curva_OIS = ut.cloudpickle_loads_verif(aba_USD_ISDA_OIS["curva_juros_ISDA"].value)
     # checa se eh para mostrar todas as informacoes ou somente as de debug
     verbal_debug = rc_book.sheets["debug"].range("verbal_debug").value
     # se estiver vazio ou nao for um booleano, entao assume False
@@ -929,6 +933,7 @@ def retorna_survival_probability():
     # recovery rate
     recovery_rate = aba_cashflow_CDS["CDS_recovery_rate"].value
     # Curva do CDS
+    assert curva_OIS is not None
     issuer_curve = CDSCurve(trade_date, cds_list, curva_OIS, recovery_rate)
     linha_debug = ut.print_debug("debug", linha_debug, repr(issuer_curve), verbal_debug)
 

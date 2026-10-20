@@ -21,6 +21,8 @@ from ...utils.global_vars import CLEAN
 
 ########################################################################################
 
+MIN_SURVIVAL_PROB = 1.0e-12
+
 
 def f(q, *args):
     """Function that returns zero when the survival probability that gives a
@@ -210,20 +212,38 @@ class CDSCurve:
             self._times = np.append(self._times, t_mat)
             self._qs = np.append(self._qs, q)
 
-            # find the root of the function f using the Newton-Raphson method. This will give us the
-            # survival probability that makes the clean PV of the CDS equal to zero
-            q_star = optimize.newton(
-                f,
-                x0=q,
-                fprime=None,
-                args=argtuple,
-                tol=1e-7,
-                maxiter=150,
-                fprime2=None,
-            )
+            q_lower = MIN_SURVIVAL_PROB
+            q_upper = min(q, 1.0)
+            pv_lower = f(q_lower, *argtuple)
+            pv_upper = f(q_upper, *argtuple)
 
-            # if q_star < 0.0 or q_star > 1.0:
-            #    raise FinError("Calibrated survival probability out of bounds")
+            if not np.isfinite(pv_lower) or not np.isfinite(pv_upper):
+                self.set_last_q(q)
+                raise FinError(
+                    f"CDS calibration produced a non-finite PV at maturity {maturity_dt}."
+                )
+
+            no_bracket = (
+                pv_lower != 0.0
+                and pv_upper != 0.0
+                and np.signbit(pv_lower) == np.signbit(pv_upper)
+            )
+            if no_bracket:
+                self.set_last_q(q)
+                raise FinError(
+                    f"CDS calibration has no survival-probability root in [{q_lower}, {q_upper}] "
+                    f"at maturity {maturity_dt}; clean PVs at the bounds are {pv_lower:.8g} and "
+                    f"{pv_upper:.8g}."
+                )
+
+            q_star = optimize.brentq(
+                f,
+                q_lower,
+                q_upper,
+                args=argtuple,
+                xtol=1e-12,
+                maxiter=50,
+            )
 
             self.set_last_q(q_star)
 
