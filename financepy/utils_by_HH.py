@@ -184,3 +184,17 @@ def cloudpickle_dump_verif(nome_arquivo, dados) -> bool:
             cloudpickle.dump(dados, f)
         retorno = True
     return retorno
+
+
+""" Funcoes de tempo e datas """
+
+
+def _ensure_utc_datetime(value: dt.datetime | None) -> dt.datetime | None:
+    # if value is None return it
+    if value is None:
+        return None
+    # if it doesn't have a time zone set them force to be UTC
+    elif value.tzinfo is None or value.utcoffset() is None:
+        return value.replace(tzinfo=dt.timezone.utc)
+    # if it does have a time zone, return the orignal value
+    return value  # .astimezone(dt.timezone.utc)

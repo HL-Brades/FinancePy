@@ -28,7 +28,8 @@ import xlwings as xw
 
 # uteis
 from . import utils_by_hh as ut
-import cloudpickle
+
+# import cloudpickle
 
 # financial functions
 from .market.curves.interpolator import InterpTypes
@@ -40,7 +41,7 @@ from .market.curves.cds_curve import CDSCurve
 # dates functions
 from .utils.date import Date
 from .utils.day_count import DayCountTypes
-from .utils.frequency import FrequencyTypes, annual_frequency
+from .utils.frequency import FrequencyTypes  # , annual_frequency
 from .utils.date import from_datetime
 from .utils.calendar import CalendarTypes  # , Calendar
 
@@ -67,15 +68,10 @@ from .products.rates.ibor_deposit import IborDeposit
 
 
 """ global variables """
-# curva de juros
-# curva_OIS = None  # OISCurve
-# data e hora da curva de juros
-# data_curva_juros: dt.datetime | None = None  # dt.datetime
 # define o modo de debug
-verbal_debug = (
-    None  # True = mostra todas as informacoes, False = mostra poucas informacoes
-)
-# matem a linha de debug
+# True = mostra todas as informacoes, False = mostra poucas/menos informacoes
+verbal_debug = None
+# cria a variavel global da linha de debug e define o valor inicial
 linha_debug = 1
 
 
@@ -108,20 +104,34 @@ def carrega_curva_mercado(linha_debug=1):
             "debug", linha_debug, f"   verbal_debug? {verbal_debug}"
         )
 
-    # Carrega os dados que estao na planilha. Se forem mais velhos do que 15 minutos, atualiza toda a curva
-    data_curva_juros = (
+    # Carrega os dados que estao na planilha.
+    linha_debug = ut.print_debug(
+        "debug", linha_debug, "   carregando dados do arquivo..."
+    )
+    data_curva_juros = ut._ensure_utc_datetime(
         aba_USD_ISDA_OIS["data_curva_juros_ISDA"].options(dates=dt.datetime).value
     )
-    curva_OIS = ut.cloudpickle_loads_verif(aba_USD_ISDA_OIS["curva_juros_ISDA"].value)
+    curva_OIS = ut.cloudpickle_load_verif(aba_USD_ISDA_OIS["curva_juros_ISDA"].value)
+
     # verifica se uma das variaveis esta None. Se estiver coloca uma data antiga
     if curva_OIS is None or data_curva_juros is None:
         # neste caso, coloca hoje menos 30 dias
         data_curva_juros = dt.datetime.now(tz=dt.timezone.utc) - dt.timedelta(days=30)
+        linha_debug = ut.print_debug(
+            "debug",
+            linha_debug,
+            "   dados carregado da curva estao vazios",
+            verbal_debug,
+        )
 
     # se a curva tem mais de 15 minutos atualiza toda a curva
+    # senao usa a que acabou de ser carregada
     if data_curva_juros < dt.datetime.now(tz=dt.timezone.utc) - dt.timedelta(
         minutes=15
     ):
+        linha_debug = ut.print_debug(
+            "debug", linha_debug, "   dados carregados muito antigos. Atualizando..."
+        )
         """pega as datass necessarias para a curva"""
         # data de inicio do swap
         trade_date = from_datetime(
@@ -272,8 +282,8 @@ def carrega_curva_mercado(linha_debug=1):
 
     # serializa e grava a curva de juros na planilha para ser usada em outros calculos
     aba_USD_ISDA_OIS["data_curva_juros_ISDA"].value = data_curva_juros
-    aba_USD_ISDA_OIS["curva_juros_ISDA"].value = "c:\python\financepy\curva_ois.bin"
-    cloudpickle_dump_verif(aba_USD_ISDA_OIS["curva_juros_ISDA"].value, curva_OIS)
+    aba_USD_ISDA_OIS["curva_juros_ISDA"].value = "c:\\python\\financepy\\curva_ois.bin"
+    ut.cloudpickle_dump_verif(aba_USD_ISDA_OIS["curva_juros_ISDA"].value, curva_OIS)
 
     # retorna a curva de juros e a linha de debug
     return curva_OIS, data_curva_juros, linha_debug
@@ -300,52 +310,8 @@ def cds_single_name():
     )
 
     """ Carrega a curva de juros da ISDA """
-    # cria a variavel da tab da curva de juros OIS-ISDA
-    aba_USD_ISDA_OIS = rc_book.sheets["USD_ISDA_OIS"]
-    data_curva_juros = (
-        aba_USD_ISDA_OIS["data_curva_juros_ISDA"].options(dates=dt.datetime).value
-    )
-    curva_OIS = ut.cloudpickle_load_verif(aba_USD_ISDA_OIS["curva_juros_ISDA"].value)
-
-    # variaveis da funcao
-    coluna = 0
-    aba_cds = None
-    # verifica se a curva de juros ja foi carregada
-    if curva_OIS is None or data_curva_juros is None:
-        # se a curva de juros nao foi carregada, entao carrega
-        linha_debug = ut.print_debug(
-            "debug",
-            linha_debug,
-            "   Carregando a curva de juros do mercado",
-            verbal_debug,
-        )
-        # chama a funcao que carrega a curva de juros
-        curva_OIS, data_curva_juros, linha_debug = carrega_curva_mercado(linha_debug)
-    else:
-        # se a curva de juros ja foi carregada, entao verifica se a curva de juros esta atualizada
-        if data_curva_juros < dt.datetime.now(tz=dt.timezone.utc) - dt.timedelta(
-            minutes=15
-        ):
-            # se a curva de juros nao esta atualizada, entao carrega novamente
-            linha_debug = ut.print_debug(
-                "debug",
-                linha_debug,
-                "   A curva de juros nao esta atualizada, carregando novamente",
-                verbal_debug,
-            )
-            # chama a funcao que carrega a curva de juros
-            curva_OIS, data_curva_juros, linha_debug = carrega_curva_mercado(
-                linha_debug
-            )
-        else:
-            # se a curva de juros esta atualizada, entao usa a curva de juros
-            linha_debug = ut.print_debug(
-                "debug",
-                linha_debug,
-                "   Usando a curva de juros da memoria",
-                verbal_debug,
-            )
-            # usa a curva de juros ja carregada
+    # chama a funcao que carrega a curva de juros
+    curva_OIS, _data_curva_juros, linha_debug = carrega_curva_mercado(linha_debug)
 
     """ Pega a coluna e nome da aba do CDS sendo calculado """
     coluna = int(rc_book.sheets["debug"].range("coluna_uma_CLN").value)
@@ -475,9 +441,12 @@ def cds_single_name():
         linha_debug = ut.print_debug("debug", linha_debug, dados, verbal_debug)
 
     """Calcula o premio do CDS e outros dados"""
+    # up-front cash settlement
+    aba_cashflow_CDS.range((27, coluna)).value = cds_contract.cash_settlement_amount(
+        trade_date, settlement_date, issuer_curve, recovery_rate
+    )
     # cds_value = cds_contract.value_by_HH(trade_date, issuer_curve, recovery_rate)
     cds_value = cds_contract.value(trade_date, issuer_curve, recovery_rate)
-
     # dirty value
     aba_cashflow_CDS.range((34, coluna)).value = cds_value[0]  # "dirty_pv"]
     # clean value
@@ -505,9 +474,6 @@ def cds_single_name():
     )
 
     # Extras by HH
-    aba_cashflow_CDS.range((37, coluna)).value = cds_contract.cash_settlement_amount(
-        trade_date, settlement_date, issuer_curve, recovery_rate
-    )
     aba_cashflow_CDS.range((38, coluna)).value = cds_contract.upfront(
         trade_date, settlement_date, issuer_curve, recovery_rate
     )
@@ -523,73 +489,23 @@ def cds_single_name():
     )
     linha_debug += 1
 
-    # By HH: extras para teste
-    temp1 = cds_contract.premium_leg_pv_by_HH(trade_date, issuer_curve, recovery_rate)
-    linha_debug = ut.print_debug(
-        "debug", linha_debug, f"prm leg by HH: {temp1:.2f}", verbal_debug
-    )
-    temp1 = cds_contract.prot_leg_pv_plus_accrual(
-        trade_date, issuer_curve, recovery_rate
-    )
-    linha_debug = ut.print_debug(
-        "debug", linha_debug, f"prot+accrual leg by HH: {temp1:.2f}", verbal_debug
-    )
-    temp1 = cds_contract.rpv01(trade_date, issuer_curve, pv01_method=0)
-    linha_debug = ut.print_debug(
-        "debug",
-        linha_debug,
-        f"RPV01 dirty: {temp1[0]:.2f}, clean: {temp1[1]:.2f}",
-        verbal_debug,
-    )
-    linha_debug = ut.print_debug(
-        "debug",
-        linha_debug,
-        f"Frequencia: {cds_contract.freq_type} ( {annual_frequency(cds_contract.freq_type):.2f} )",
-        verbal_debug,
-    )
-    temp1 = cds_contract.value_by_HH(trade_date, issuer_curve, recovery_rate)
-    linha_debug = ut.print_debug(
-        "debug",
-        linha_debug,
-        f"Value by HH dirty: {temp1[0]:.2f}, clean: {temp1[1]:.2f}",
-        verbal_debug,
-    )
-    temp1 = cds_contract.value(trade_date, issuer_curve, recovery_rate)
-    linha_debug = ut.print_debug(
-        "debug",
-        linha_debug,
-        f"Value dirty: {temp1[0]:.2f}, clean: {temp1[1]:.2f}",
-        verbal_debug,
-    )
-    temp1 = cds_contract.get_pcd(trade_date)
-    linha_debug = ut.print_debug(
-        "debug",
-        linha_debug,
-        f"pcd: {temp1[0]}, start_index: {temp1[1]}",
-        verbal_debug,
-    )
-    temp1 = cds_contract.accrual_factors
-    linha_debug = ut.print_debug(
-        "debug",
-        linha_debug,
-        f"Accrual factors: {temp1}",
-        verbal_debug,
-    )
-
 
 def f_premio_cds(
     cds_flat_spread: float,
     trade_date: Date,
     setp_in_date: Date,
+    settlement_date: Date,
     maturity_date: Date,
     running_coupon: float,
     recovery_rate: float,
     notional: float,
     long_protection: bool,
     curva_OIS,
+    freq_type: FrequencyTypes = FrequencyTypes.QUARTERLY,
+    prev_coupon_dt: Date | None = None,
+    accrual_dc_type: DayCountTypes = DayCountTypes.ACT_360,
 ) -> float:
     """Calcula o premio do CDS da CLN dado o spread
-
     Args:
         cds_flat_spread (float): spread o CDS
         trade_date (Date): data da negociacao
@@ -600,7 +516,6 @@ def f_premio_cds(
         notional (float): valor nocional
         long_protection (bool): True = compra CDS, False = vende CDS
         curva_OIS (_type_): curva OIS
-
     Returns:
         float: premio do CDS
     """
@@ -609,25 +524,24 @@ def f_premio_cds(
     if isinstance(cds_flat_spread, np.ndarray):
         cds_flat_spread = cds_flat_spread[0].astype(float)
     # cria os vertices de CDS
-    cds6m = CDS(setp_in_date, "6M", cds_flat_spread)
-    cds1y = CDS(setp_in_date, "1Y", cds_flat_spread)
-    cds2y = CDS(setp_in_date, "2Y", cds_flat_spread)
     cds3y = CDS(setp_in_date, "3Y", cds_flat_spread)
-    cds4y = CDS(setp_in_date, "4Y", cds_flat_spread)
     cds5y = CDS(setp_in_date, "5Y", cds_flat_spread)
     cds7y = CDS(setp_in_date, "7Y", cds_flat_spread)
     cds10y = CDS(setp_in_date, "10Y", cds_flat_spread)
-    # Lista dos vertices de CDS
-    cds_list = [cds6m, cds1y, cds2y, cds3y, cds4y, cds5y, cds7y, cds10y]
     # Curva do CDS
-    issuer_curve = CDSCurve(trade_date, cds_list, curva_OIS, recovery_rate)
+    issuer_curve = CDSCurve(
+        trade_date, [cds3y, cds5y, cds7y, cds10y], curva_OIS, recovery_rate
+    )
     # contrato de CDS
     cds_contract = CDS(
         setp_in_date, maturity_date, running_coupon, notional, long_protection
     )
 
     """Calcula o premio do CDS e outros dados"""
-    cds_value = cds_contract.value_by_HH(trade_date, issuer_curve, recovery_rate)
+    # cds_value = cds_contract.value_by_HH(trade_date, issuer_curve, recovery_rate)
+    cds_value = cds_contract.cash_settlement_amount(
+        trade_date, settlement_date, issuer_curve, recovery_rate
+    )
 
     """retorna o premio o CDS - clean value = cash amount (BBG)"""
     return cds_value[1]  # "clean_pv"]
@@ -637,6 +551,7 @@ def f_auxiliar_cds_embutido(
     cds_flat_spread: float,
     trade_date: Date,
     setp_in_date: Date,
+    settlement_date: Date,
     maturity_date: Date,
     running_coupon: float,
     recovery_rate: float,
@@ -657,6 +572,7 @@ def f_auxiliar_cds_embutido(
         cds_flat_spread,
         trade_date,
         setp_in_date,
+        settlement_date,
         maturity_date,
         running_coupon,
         recovery_rate,
@@ -694,53 +610,13 @@ def procura_preco_cds():
         "debug", linha_debug, f"   verbal_debug? {verbal_debug}"
     )
 
-    """Carrega a curva de juros da ISDA"""
-    # cria a variavel da tab da curva de juros OIS-ISDA
-    aba_USD_ISDA_OIS = rc_book.sheets["USD_ISDA_OIS"]
-    data_curva_juros = (
-        aba_USD_ISDA_OIS["data_curva_juros_ISDA"].options(dates=dt.datetime).value
-    )
-    curva_OIS = ut.cloudpickle_loads_verif(aba_USD_ISDA_OIS["curva_juros_ISDA"].value)
+    """ Carrega a curva de juros da ISDA """
+    # chama a funcao que carrega a curva de juros
+    curva_OIS, _data_curva_juros, linha_debug = carrega_curva_mercado(linha_debug)
 
     # variaveis da funcao
     coluna = 0
     aba_cds = None
-    # verifica se a curva de juros ja foi carregada
-    if curva_OIS is None or data_curva_juros is None:
-        # se a curva de juros nao foi carregada, entao carrega
-        linha_debug = ut.print_debug(
-            "debug",
-            linha_debug,
-            "   Carregando a curva de juros do mercado",
-            verbal_debug,
-        )
-        # chama a funcao que carrega a curva de juros
-        curva_OIS, data_curva_juros, linha_debug = carrega_curva_mercado(linha_debug)
-    else:
-        # se a curva de juros ja foi carregada, entao verifica se a curva de juros esta atualizada
-        if data_curva_juros < dt.datetime.now(dt.timezone.utc) - dt.timedelta(
-            minutes=15
-        ):
-            # se a curva de juros nao esta atualizada, entao carrega novamente
-            linha_debug = ut.print_debug(
-                "debug",
-                linha_debug,
-                "   A curva de juros nao esta atualizada, carregando novamente",
-                verbal_debug,
-            )
-            # chama a funcao que carrega a curva de juros
-            curva_OIS, data_curva_juros, linha_debug = carrega_curva_mercado(
-                linha_debug
-            )
-        else:
-            # se a curva de juros esta atualizada, entao usa a curva de juros
-            linha_debug = ut.print_debug(
-                "debug",
-                linha_debug,
-                "   Usando a curva de juros da memoria",
-                verbal_debug,
-            )
-            # usa a curva de juros ja carregada
 
     """Pega a coluna e nome da aba do CDS sendo calculado"""
     coluna = int(rc_book.sheets["debug"].range("coluna_uma_CLN").value)
@@ -763,50 +639,41 @@ def procura_preco_cds():
         aba_cashflow_CDS.range((11, coluna)).options(dates=dt.date).value
     )
     # t+1 do trade date
-    setp_in_date = trade_date.add_days(1)
+    # old by HH: setp_in_date = trade_date.add_days(1)
+    setp_in_date = from_datetime(
+        aba_cashflow_CDS.range((22, coluna)).options(dates=dt.date).value
+    )
+    # settlement_date
+    settlement_date = from_datetime(
+        aba_cashflow_CDS.range((23, coluna)).options(dates=dt.date).value
+    )
     # CDS Flat Spread negociado com o mercado - spread do CDS em percentual
     # cds_flat_spread = (aba_cashflow_CDS.range((17, coluna)).value / 10000)
     # data de vencimento
     maturity_date = from_datetime(
-        aba_cashflow_CDS.range((19, coluna)).options(dates=dt.date).value
+        aba_cashflow_CDS.range((20, coluna)).options(dates=dt.date).value
     )
     # coupon do CDS - spread do CDS em percentual
-    running_coupon = aba_cashflow_CDS.range((21, coluna)).value / 10000
+    running_coupon = aba_cashflow_CDS.range((24, coluna)).value / 10000
     # notional do CDS
     notional = aba_cashflow_CDS.range((6, coluna)).value
     # Definie sempre como Long o CDS embutido que o Banco compra do cliente via a CLN
-    long_protection = False  # True = compra CDS, False = vende CDS
+    long_protection = True  # True = compra CDS, False = vende CDS
     # recovery rate
-    recovery_rate = aba_cashflow_CDS.range((22, coluna)).value
+    recovery_rate = aba_cashflow_CDS.range((25, coluna)).value
 
-    # premio do CDS de mercado
-    premio_CDS_mercado = aba_cashflow_CDS.range((24, coluna)).value
+    # premio do CDS de mercado - valor em moeda do up-front-cash
+    premio_CDS_mercado = aba_cashflow_CDS.range((27, coluna)).value
     # mostra no debug o premio do CDS de mercado
     linha_debug = ut.print_debug(
         "debug", linha_debug, f"premio mercado: {premio_CDS_mercado}", verbal_debug
     )
-
     # receita desejada em moeda
-    receita_desejada = aba_cashflow_CDS.range((49, coluna)).value
+    receita_desejada = aba_cashflow_CDS.range((54, coluna)).value
     # mostra no debug a receita desejada
     linha_debug = ut.print_debug(
         "debug", linha_debug, f"receita desejada: {receita_desejada}", verbal_debug
     )
-
-    # temp = f_auxiliar_cds_embutido(
-    #     0.0123,
-    #     trade_date,
-    #     setp_in_date,
-    #     maturity_date,
-    #     running_coupon,
-    #     recovery_rate,
-    #     notional,
-    #     long_protection,
-    #     curva_OIS,
-    #     premio_CDS_mercado,
-    #     receita_desejada,
-    # )
-    # linha_debug = ut.print_debug("debug", linha_debug, f"teste: {temp}", verbal_debug)
 
     """faz o goal-seek para achar o valor do CDS que chegue no spread desejado"""
     try:
@@ -819,6 +686,7 @@ def procura_preco_cds():
             args=(
                 trade_date,
                 setp_in_date,
+                settlement_date,
                 maturity_date,
                 running_coupon,
                 recovery_rate,
@@ -839,12 +707,13 @@ def procura_preco_cds():
         # verifica se o resultado foi encontrado
         if resultado_root.success:
             # retorna o spread do CDS em bps = % * 10000
-            aba_cashflow_CDS.range((55, coluna)).value = resultado_root.x[0] * 10000
+            aba_cashflow_CDS.range((60, coluna)).value = resultado_root.x[0] * 10000
             # retorna o premio do CDS em moeda
-            aba_cashflow_CDS.range((54, coluna + 2)).value = -f_premio_cds(
+            aba_cashflow_CDS.range((59, coluna + 2)).value = -f_premio_cds(
                 resultado_root.x[0],
                 trade_date,
                 setp_in_date,
+                settlement_date,
                 maturity_date,
                 running_coupon,
                 recovery_rate,
@@ -855,20 +724,20 @@ def procura_preco_cds():
         # nao achou nenhuma raiz
         else:
             # coloca a mensagem de erro
-            aba_cashflow_CDS.range((55, coluna)).value = (
+            aba_cashflow_CDS.range((60, coluna)).value = (
                 f"Error: no solution found. {resultado_root.message}"
             )
             # apaga o premio do CDS
-            aba_cashflow_CDS.range((55, coluna + 1)).clear_contents()
+            aba_cashflow_CDS.range((59, coluna + 2)).clear_contents()
 
     # deu algum erro esperado na busca da raiz / nos calculos numericos
     except (TypeError, ValueError, RuntimeError, ZeroDivisionError, OverflowError) as e:
         linha_debug = ut.print_debug("debug", linha_debug, f"error: {e}", verbal_debug)
-        aba_cashflow_CDS.range((55, coluna)).value = (
+        aba_cashflow_CDS.range((60, coluna)).value = (
             "Error: no solution found. See debug."
         )
         # apaga o premio do CDS
-        aba_cashflow_CDS.range((55, coluna + 1)).clear_contents()
+        aba_cashflow_CDS.range((59, coluna + 2)).clear_contents()
 
     # end
     linha_debug = ut.print_debug(
@@ -891,12 +760,6 @@ def retorna_survival_probability():
     rc_book = xw.Book.caller()  # xw.Book(planilha)
     # cria a variavel da tab da curva de juros OIS-ISDA
     aba_cashflow_CDS = rc_book.sheets["Cashflow CDS"]
-    # cria a variavel da tab da curva de juros OIS-ISDA
-    aba_USD_ISDA_OIS = rc_book.sheets["USD_ISDA_OIS"]
-    data_curva_juros = (
-        aba_USD_ISDA_OIS["data_curva_juros_ISDA"].options(dates=dt.datetime).value
-    )
-    curva_OIS = ut.cloudpickle_loads_verif(aba_USD_ISDA_OIS["curva_juros_ISDA"].value)
     # checa se eh para mostrar todas as informacoes ou somente as de debug
     verbal_debug = rc_book.sheets["debug"].range("verbal_debug").value
     # se estiver vazio ou nao for um booleano, entao assume False
@@ -908,7 +771,7 @@ def retorna_survival_probability():
     )
 
     """Carrega a curva de juros da ISDA"""
-    curva_OIS, data_curva_juros, linha_debug = carrega_curva_mercado(linha_debug)
+    curva_OIS, _data_curva_juros, linha_debug = carrega_curva_mercado(linha_debug)
 
     """Calcula a curva de CDS para um unico nome"""
     trade_date = from_datetime(
