@@ -12,6 +12,12 @@
 #       uv pip install --system-certs --system --upgrade --editable .
 # ou
 #       uv pip install --system-certs --system --upgrade --editable C:\Python\FinancePy
+#
+# Nota 2: para habilitar o XLWings
+# Enable Trust access to the VBA project object model under File > Options > Trust Center > Trust Center
+# Settings > Macro Settings. You only need to do this once. Also, this is only required for importing the
+# functions, i.e. end users won’t need to bother about this.
+#
 
 """import the packages that we'll use"""
 
@@ -24,6 +30,7 @@ import numpy as np
 import scipy.optimize as opt
 
 # excel wrapper
+# https://docs.xlwings.org/en/latest/api/
 import xlwings as xw
 
 # uteis
@@ -48,7 +55,7 @@ from .utils.calendar import CalendarTypes  # , Calendar
 # swap functions
 from .products.rates.ibor_swap import SwapTypes
 from .products.rates.ois import OIS
-from .products.rates.ois_curve import OISCurve
+from .market.curves.ois_curve import OISCurve
 from .products.rates.ibor_deposit import IborDeposit
 
 # plot
