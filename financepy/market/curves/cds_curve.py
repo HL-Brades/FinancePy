@@ -84,8 +84,6 @@ class CDSCurve:
         else:
             pass  # In some cases we allow None to be passed
 
-        return
-
     ###########################################################################
 
     def set_times(self, times: np.array):
@@ -102,7 +100,6 @@ class CDSCurve:
 
     def set_q(self, index, q):
         """Set the survival probability at a specific index."""
-
         n_points = len(self._qs)
 
         if index < 0 or index >= n_points:
@@ -114,7 +111,6 @@ class CDSCurve:
 
     def set_last_q(self, q):
         """Set the survival probability factor at last index."""
-
         n_points = len(self._qs)
         self._qs[n_points - 1] = q
 
@@ -122,7 +118,6 @@ class CDSCurve:
 
     def _validate(self, cds_contracts):
         """Ensure that contracts are in increasing maturity."""
-
         if len(cds_contracts) == 0:
             raise FinError("No CDS contracts have been supplied.")
 
@@ -131,7 +126,7 @@ class CDSCurve:
         for cds in cds_contracts[1:]:
             if cds.maturity_dt <= maturity_dt:
                 raise FinError("CDS contracts not in increasing maturity.")
-
+            # next maturity becomes the current maturity for the next iteration
             maturity_dt = cds.maturity_dt
 
     ###########################################################################
@@ -160,8 +155,10 @@ class CDSCurve:
         if isinstance(t, np.ndarray):
             n = len(t)
             qs = np.zeros(n)
-            for i in range(0, n):
-                qs[i] = _uinterpolate(t[i], self._times, self._qs, self.interp_method.value)
+            for i in range(n):
+                qs[i] = _uinterpolate(
+                    t[i], self._times, self._qs, self.interp_method.value
+                )
             return qs
         elif np.isscalar(t):
             q = _uinterpolate(float(t), self._times, self._qs, self.interp_method.value)
@@ -195,14 +192,19 @@ class CDSCurve:
         self._validate(self.cds_contracts)
         num_times = len(self.cds_contracts)
 
-        # we size the vectors to include time zero
+        # we size the vectors to include time zero with probability 1.0 and
+        # then we append the calibrated survival probabilities for each CDS contract
         self._times = np.array([0.0])
         self._qs = np.array([1.0])
 
-        for i in range(0, num_times):
+        # for each CDS contract we calibrate the survival probability that makes the
+        # clean PV of the CDS equal to zero and we append this to the survival
+        for i in range(num_times):
 
             maturity_dt = self.cds_contracts[i].maturity_dt
 
+            # arguments that hte function f will pass to the function cds.value to calibrate the
+            # survival probability for this CDS
             argtuple = (
                 self,
                 self.anchor_dt,
@@ -210,24 +212,50 @@ class CDSCurve:
                 self.recovery_rate,
             )
 
+<<<<<<< HEAD
             t_mat = times_from_dates(self.anchor_dt, maturity_dt, self.dc_type)
+=======
+            t_mat = (maturity_dt - self.anchor_dt) / G_DAYS_IN_YEAR
+            # previous survival probability is used as the initial guess for the next one
+>>>>>>> pr-base/master
             q = self._qs[i]
 
+            # add the time and initial guess for survival probability to the curve vectors
             self._times = np.append(self._times, t_mat)
             self._qs = np.append(self._qs, q)
 
-            q_star = optimize.newton(
-                f,
-                x0=q,
-                fprime=None,
-                args=argtuple,
-                tol=1e-7,
-                maxiter=50,
-                fprime2=None,
-            )
+            q_lower = MIN_SURVIVAL_PROB
+            q_upper = min(q, 1.0)
+            pv_lower = f(q_lower, *argtuple)
+            pv_upper = f(q_upper, *argtuple)
 
-            if q_star < 0.0 or q_star > 1.0:
-                raise FinError("Calibrated survival probability out of bounds")
+            if not np.isfinite(pv_lower) or not np.isfinite(pv_upper):
+                self.set_last_q(q)
+                raise FinError(
+                    f"CDS calibration produced a non-finite PV at maturity {maturity_dt}."
+                )
+
+            no_bracket = (
+                pv_lower != 0.0
+                and pv_upper != 0.0
+                and np.signbit(pv_lower) == np.signbit(pv_upper)
+            )
+            if no_bracket:
+                self.set_last_q(q)
+                raise FinError(
+                    f"CDS calibration has no survival-probability root in [{q_lower}, {q_upper}] "
+                    f"at maturity {maturity_dt}; clean PVs at the bounds are {pv_lower:.8g} and "
+                    f"{pv_upper:.8g}."
+                )
+
+            q_star = optimize.brentq(
+                f,
+                q_lower,
+                q_upper,
+                args=argtuple,
+                xtol=1e-12,
+                maxiter=50,
+            )
 
             self.set_last_q(q_star)
 
