@@ -21,7 +21,9 @@ from ...models.sabr import vol_function_sabr
 from ...models.sabr import SABR
 from ...models.black_scholes import BlackScholes
 from ...models.black import Black
+from ...models.black import Black
 
+from ...models.bs_european_analytic import european_value, delta
 from ...models.bs_european_analytic import european_value, delta
 
 from ...utils.helpers import check_argument_types, label_to_string
@@ -289,6 +291,7 @@ class FXVanillaOption:
                     OptionTypes.AMERICAN_CALL.value,
                     k,
                     True
+                    True
                 )["value"]
 
             elif self.opt_type == OptionTypes.AMERICAN_PUT:
@@ -304,6 +307,7 @@ class FXVanillaOption:
                     t_exp,
                     OptionTypes.AMERICAN_PUT.value,
                     k,
+                    True
                     True
                 )["value"]
             else:
@@ -365,6 +369,11 @@ class FXVanillaOption:
 
         bump_size = 0.0001 * spot_fx_rate
 
+        v = self.value(value_dt,
+                       spot_fx_rate,
+                       ccy1_discount_curve,
+                       ccy2_discount_curve,
+                       model)
         v = self.value(value_dt,
                        spot_fx_rate,
                        ccy1_discount_curve,
@@ -493,9 +502,12 @@ class FXVanillaOption:
 
             ln_s0_k = np.log(s0 / k)
             sqrt_t = np.sqrt(t_exp)
+            sqrt_t = np.sqrt(t_exp)
             den = volatility * sqrt_t
             mu = r_d - r_f
             v2 = volatility * volatility
+            d1 = (ln_s0_k + (mu + v2 / 2.0) * t_exp) / den
+            gamma = np.exp(-r_f * t_exp) * normcdf_prime(d1)
             d1 = (ln_s0_k + (mu + v2 / 2.0) * t_exp) / den
             gamma = np.exp(-r_f * t_exp) * normcdf_prime(d1)
             gamma = gamma / s0 / den
@@ -644,6 +656,7 @@ class FXVanillaOption:
                  domestic_curve: DiscountCurve,
                  foreign_curve: DiscountCurve,
                  model: Model,
+                 num_paths: int = 10000,
                  num_paths: int = 10000,
                  seed=4242,
                  ):

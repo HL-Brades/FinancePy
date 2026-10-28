@@ -2,6 +2,8 @@
 
 import matplotlib.pyplot as plt
 from FinTestCases import FinTestCases, global_test_case_mode
+import matplotlib.pyplot as plt
+from FinTestCases import FinTestCases, global_test_case_mode
 import add_fp_to_path
 
 from financepy.utils.date import Date
@@ -10,6 +12,7 @@ from financepy.utils.day_count import DayCountTypes
 
 
 from financepy.utils.global_types import OptionTypes
+from financepy.models.bs_american_analytic import BlackScholesAlgorithmTypes
 from financepy.models.bs_american_analytic import BlackScholesAlgorithmTypes
 
 from financepy.market.curves.flat_discount_curve import FlatDiscountCurve
@@ -44,6 +47,7 @@ def test_black_scholes():
     eu_option_type = OptionTypes.EUROPEAN_CALL
 
     # Pure American Option TREE
+    amer_option = EquityAmericanOption(expiry_dt, strike_price, opt_type)
     amer_option = EquityAmericanOption(expiry_dt, strike_price, opt_type)
 
     # American with European style exercise TREE
@@ -92,6 +96,8 @@ def test_black_scholes():
             num_steps_per_year=num_steps,
         )
 
+        algo_type = BlackScholesAlgorithmTypes.ANALYTICAL
+
         v_eu = ameu_option.value(
             value_dt, stock_price, discount_curve, dividend_curve, model_tree,
             algo_type=BlackScholesAlgorithmTypes.CRR_TREE,
@@ -100,10 +106,16 @@ def test_black_scholes():
 
         algo_type = BlackScholesAlgorithmTypes.BARONE_ADESI_WHALEY
 
+        algo_type = BlackScholesAlgorithmTypes.BARONE_ADESI_WHALEY
+
         v_bs = eu_option.value(
+            value_dt, stock_price, discount_curve, dividend_curve, model_anal,
             value_dt, stock_price, discount_curve, dividend_curve, model_anal,
         )
 
+        v_am_baw = amer_option.value(
+            value_dt, stock_price, discount_curve, dividend_curve, model_BAW,
+            algo_type=algo_type
         v_am_baw = amer_option.value(
             value_dt, stock_price, discount_curve, dividend_curve, model_BAW,
             algo_type=algo_type
@@ -144,6 +156,7 @@ def test_barone_edesi():
     opt_type = OptionTypes.AMERICAN_CALL
     eu_option_type = OptionTypes.EUROPEAN_CALL
 
+    amer_option = EquityAmericanOption(expiry_dt, strike_price, opt_type)
     amer_option = EquityAmericanOption(expiry_dt, strike_price, opt_type)
 
     ameu_option = EquityAmericanOption(expiry_dt, strike_price, eu_option_type)

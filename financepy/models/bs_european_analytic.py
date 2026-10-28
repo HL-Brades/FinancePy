@@ -2,18 +2,22 @@
 
 import numpy as np
 
-from numba import vectorize, njit
+from numba import float64, int64, vectorize, njit
 
 from ..utils.global_types import OptionTypes
 from ..utils.global_vars import G_SMALL
 from ..utils.math import normcdf, normcdf_vect, normcdf_prime_vect
 
-########################################################################################
 # Analytical Black-Scholes model implementation and approximations for American style
+
+########################################################################################
+
+
 ########################################################################################
 
 
 @vectorize(
+    [float64(float64, float64, float64, float64)],
     fastmath=True,
     cache=True,
 )
@@ -42,6 +46,7 @@ def fwd(
 
 
 @vectorize(
+    [float64(float64, float64, float64, float64, float64, float64, int64)],
     fastmath=True,
     cache=True,
 )
@@ -177,7 +182,11 @@ def european_value(
 ########################################################################################
 
 
-@vectorize(fastmath=True, cache=True)
+@vectorize(
+    [float64(float64, float64, float64, float64, float64, float64, int64)],
+    fastmath=True,
+    cache=True,
+)
 def delta(
     s: float,
     t: float,
@@ -211,6 +220,7 @@ def delta(
 
 
 @vectorize(
+    [float64(float64, float64, float64, float64, float64, float64, int64)],
     fastmath=True,
     cache=True,
 )
@@ -242,6 +252,7 @@ def gamma(
 
 
 @vectorize(
+    [float64(float64, float64, float64, float64, float64, float64, int64)],
     fastmath=True,
     cache=True,
 )
@@ -273,6 +284,7 @@ def vega(
 
 
 @vectorize(
+    [float64(float64, float64, float64, float64, float64, float64, int64)],
     fastmath=True,
     cache=True,
 )
@@ -317,6 +329,7 @@ def theta(
 
 
 @vectorize(
+    [float64(float64, float64, float64, float64, float64, float64, int64)],
     fastmath=True,
     cache=True,
 )
@@ -359,6 +372,7 @@ def rho(
 
 
 @vectorize(
+    [float64(float64, float64, float64, float64, float64, float64, int64)],
     fastmath=True,
     cache=True,
 )
@@ -387,6 +401,24 @@ def vanna(
     vanna = -np.exp(-q * t) * normcdf_prime_vect(d1) * (d2 / v)
     return vanna
 
+
+########################################################################################
+
+
+# @njit(fastmath=True, cache=True)
+# def _f(sigma, args):
+
+#     s = args[0]
+#     t = args[1]
+#     k = args[2]
+#     r = args[3]
+#     q = args[4]
+#     price = args[5]
+#     opt_type_value = int(args[6])
+
+#     bs_price = european_value(s, t, k, r, q, sigma, opt_type_value)
+#     obj = bs_price - price
+#     return obj
 
 ########################################################################################
 
@@ -549,6 +581,7 @@ def _bisection_iv(
 
 
 @vectorize(
+    [float64(float64, float64, float64, float64, float64, int64)],
     fastmath=True,
     cache=True,
 )
@@ -578,6 +611,7 @@ def intrinsic(
 
 
 @vectorize(
+    [float64(float64, float64, float64, float64, float64, float64, int64)],
     fastmath=True,
     cache=True,
 )

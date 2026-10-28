@@ -21,9 +21,17 @@ import numpy as np
 
 
 def test_fin_cds_curve():
+import numpy as np
+
+
+def test_fin_cds_curve():
 
     curve_dt = Date(20, 12, 2018)
+    curve_dt = Date(20, 12, 2018)
 
+    swaps = []
+    depos = []
+    fras = []
     swaps = []
     depos = []
     fras = []
@@ -31,7 +39,11 @@ def test_fin_cds_curve():
     fixed_dcc = DayCountTypes.ACT_365F
     fixed_freq = FrequencyTypes.SEMI_ANNUAL
     fixed_cpn = 0.05
+    fixed_dcc = DayCountTypes.ACT_365F
+    fixed_freq = FrequencyTypes.SEMI_ANNUAL
+    fixed_cpn = 0.05
 
+    for i in range(1, 11):
     for i in range(1, 11):
 
         maturity_dt = curve_dt.add_months(12 * i)
@@ -44,18 +56,38 @@ def test_fin_cds_curve():
             fixed_dcc,
         )
         swaps.append(swap)
+        maturity_dt = curve_dt.add_months(12 * i)
+        swap = IborSwap(
+            curve_dt,
+            maturity_dt,
+            SwapTypes.PAY,
+            fixed_cpn,
+            fixed_freq,
+            fixed_dcc,
+        )
+        swaps.append(swap)
 
     libor_curve = IborSingleCurve(curve_dt, depos, fras, swaps)
+    libor_curve = IborSingleCurve(curve_dt, depos, fras, swaps)
 
+    cds_contracts = []
     cds_contracts = []
 
     for i in range(1, 11):
         maturity_dt = curve_dt.add_months(12 * i)
         cds = CDS(curve_dt, maturity_dt, 0.005 + 0.001 * (i - 1))
         cds_contracts.append(cds)
+    for i in range(1, 11):
+        maturity_dt = curve_dt.add_months(12 * i)
+        cds = CDS(curve_dt, maturity_dt, 0.005 + 0.001 * (i - 1))
+        cds_contracts.append(cds)
 
     recovery_rate = 0.40
+    recovery_rate = 0.40
 
+    issuer_curve = CDSCurve(
+        curve_dt, cds_contracts, libor_curve, recovery_rate
+    )
     issuer_curve = CDSCurve(
         curve_dt, cds_contracts, libor_curve, recovery_rate
     )

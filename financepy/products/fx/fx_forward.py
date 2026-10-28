@@ -73,6 +73,17 @@ class FXForward:
     FX rates are expressed in units of the second currency
     per unit of the first currency.
     """
+    """Deliverable FX forward transaction.
+
+    The transaction exchanges two currencies at an agreed
+    exchange rate on a specified future settlement date.
+
+    The buy_currency determines which currency is received
+    and which is paid.
+
+    FX rates are expressed in units of the second currency
+    per unit of the first currency.
+    """
 
     def __init__(
         self,
@@ -80,6 +91,8 @@ class FXForward:
         strike_fx_rate: float,
         currency_pair: str,
         notional: float,
+        notional_ccy: str,
+        buy_ccy: str,
         notional_ccy: str,
         buy_ccy: str,
     ) -> None:
@@ -110,6 +123,13 @@ class FXForward:
         self.strike_fx_rate = strike_fx_rate
         self.currency_pair = currency_pair
 
+        if buy_ccy not in (self.for_ccy, self.dom_ccy):
+            raise FinError("Buy currency not in currency pair.")
+
+        self.settlement_dt = settlement_dt
+        self.strike_fx_rate = strike_fx_rate
+        self.ccy_pair = ccy_pair
+
         self.notional = notional
         self.notional_ccy = notional_ccy
         self.buy_ccy = buy_ccy
@@ -131,6 +151,7 @@ class FXForward:
         self.spot_dt = None
 
     ##########################################################################
+    ##########################################################################
 
     def value(
         self,
@@ -138,6 +159,8 @@ class FXForward:
         spot_fx_rate: float,
         domestic_curve: DiscountCurve,
         foreign_curve: DiscountCurve,
+    ) -> dict[str, float]:
+        """Calculate the present value of the FX forward in both currencies."""
     ) -> dict[str, float]:
         """Calculate the present value of the FX forward in both currencies."""
 
@@ -177,16 +200,24 @@ class FXForward:
             self.dom_ccy: npv_dom,
             self.for_ccy: npv_for,
         }
+            self.dom_ccy: npv_dom,
+            self.for_ccy: npv_for,
+        }
 
+    ##########################################################################
     ##########################################################################
 
     def __repr__(self):
         s = label_to_string("OBJECT_TYPE", type(self).__name__)
         s += label_to_string("SPOT DATE", self.spot_dt)
         s += label_to_string("SETTLEMENT DATE", self.settlement_dt)
+        s += label_to_string("SPOT DATE", self.spot_dt)
+        s += label_to_string("SETTLEMENT DATE", self.settlement_dt)
         s += label_to_string("STRIKE FX RATE", self.strike_fx_rate)
-        s += label_to_string("CURRENCY PAIR", self.currency_pair)
+        s += label_to_string("CURRENCY PAIR", self.ccy_pair)
         s += label_to_string("NOTIONAL", self.notional)
+        s += label_to_string("NOTIONAL CCY", self.notional_ccy)
+        s += label_to_string("BUY CURRENCY", self.buy_ccy)
         s += label_to_string("NOTIONAL CCY", self.notional_ccy)
         s += label_to_string("BUY CURRENCY", self.buy_ccy)
         return s

@@ -47,7 +47,6 @@ from financepy.products.equity.equity_american_option import (
     EquityAmericanOption,
 )
 
-
 LINE = "=" * 100
 SUBLINE = "-" * 100
 
@@ -354,29 +353,17 @@ print("\n" + LINE)
 print("1. EUROPEAN AND AMERICAN OPTION VALUATION")
 print(LINE)
 
-print(
-    f"{'Stock Price':<35}: {stock_price:12.6f}"
-)
+print(f"{'Stock Price':<35}: {stock_price:12.6f}")
 
-print(
-    f"{'Strike Price':<35}: {strike_price:12.6f}"
-)
+print(f"{'Strike Price':<35}: {strike_price:12.6f}")
 
-print(
-    f"{'Interest Rate':<35}: {interest_rate * 100.0:11.6f}%"
-)
+print(f"{'Interest Rate':<35}: {interest_rate * 100.0:11.6f}%")
 
-print(
-    f"{'Dividend Yield':<35}: {dividend_yield * 100.0:11.6f}%"
-)
+print(f"{'Dividend Yield':<35}: {dividend_yield * 100.0:11.6f}%")
 
-print(
-    f"{'Volatility':<35}: {volatility * 100.0:11.6f}%"
-)
+print(f"{'Volatility':<35}: {volatility * 100.0:11.6f}%")
 
-print(
-    f"{'CRR Steps':<35}: {num_steps:12d}"
-)
+print(f"{'CRR Steps':<35}: {num_steps:12d}")
 
 eur_put_value = option_value(
     european_put,
@@ -416,32 +403,17 @@ amer_call_value = option_value(
 
 print("\n" + SUBLINE)
 
-print(
-    f"{'OPTION':<30}"
-    f"{'VALUE':>18}"
-)
+print(f"{'OPTION':<30}" f"{'VALUE':>18}")
 
 print(SUBLINE)
 
-print(
-    f"{'European Put':<30}"
-    f"{eur_put_value:18.8f}"
-)
+print(f"{'European Put':<30}" f"{eur_put_value:18.8f}")
 
-print(
-    f"{'American Put':<30}"
-    f"{amer_put_value:18.8f}"
-)
+print(f"{'American Put':<30}" f"{amer_put_value:18.8f}")
 
-print(
-    f"{'European Call':<30}"
-    f"{eur_call_value:18.8f}"
-)
+print(f"{'European Call':<30}" f"{eur_call_value:18.8f}")
 
-print(
-    f"{'American Call':<30}"
-    f"{amer_call_value:18.8f}"
-)
+print(f"{'American Call':<30}" f"{amer_call_value:18.8f}")
 
 
 # ============================================================================
@@ -467,15 +439,9 @@ print("\n" + LINE)
 print("2. EARLY-EXERCISE PREMIUM")
 print(LINE)
 
-put_exercise_premium = (
-    amer_put_value
-    - eur_put_value
-)
+put_exercise_premium = amer_put_value - eur_put_value
 
-call_exercise_premium = (
-    amer_call_value
-    - eur_call_value
-)
+call_exercise_premium = amer_call_value - eur_call_value
 
 print(
     f"{'OPTION':<30}"
@@ -559,11 +525,7 @@ for label, option in [
     )
 
     print(
-        f"{label:<25}"
-        f"{v:16.8f}"
-        f"{delta:16.8f}"
-        f"{gamma:16.8f}"
-        f"{theta:16.8f}"
+        f"{label:<25}" f"{v:16.8f}" f"{delta:16.8f}" f"{gamma:16.8f}" f"{theta:16.8f}"
     )
 
 
@@ -617,20 +579,11 @@ benchmark_call = american_call.value(
     benchmark_model,
 )
 
-print(
-    f"{'CRR Benchmark Steps':<40}: "
-    f"{benchmark_steps}"
-)
+print(f"{'CRR Benchmark Steps':<40}: " f"{benchmark_steps}")
 
-print(
-    f"{'CRR American Put':<40}: "
-    f"{benchmark_put:12.8f}"
-)
+print(f"{'CRR American Put':<40}: " f"{benchmark_put:12.8f}")
 
-print(
-    f"{'CRR American Call':<40}: "
-    f"{benchmark_call:12.8f}"
-)
+print(f"{'CRR American Call':<40}: " f"{benchmark_call:12.8f}")
 
 
 # ============================================================================
@@ -661,49 +614,27 @@ call_methods = available_american_models(
 
 print("\nAMERICAN PUT")
 
-print(
-    f"{'METHOD':<40}"
-    f"{'VALUE':>16}"
-    f"{'ERROR VS CRR':>18}"
-)
+print(f"{'METHOD':<40}" f"{'VALUE':>16}" f"{'ERROR VS CRR':>18}")
 
 print(SUBLINE)
 
 for model_type, method_value in put_methods:
 
-    error = (
-        method_value
-        - benchmark_put
-    )
+    error = method_value - benchmark_put
 
-    print(
-        f"{model_type_name(model_type):<40}"
-        f"{method_value:16.8f}"
-        f"{error:18.8f}"
-    )
+    print(f"{model_type_name(model_type):<40}" f"{method_value:16.8f}" f"{error:18.8f}")
 
 print("\nAMERICAN CALL")
 
-print(
-    f"{'METHOD':<40}"
-    f"{'VALUE':>16}"
-    f"{'ERROR VS CRR':>18}"
-)
+print(f"{'METHOD':<40}" f"{'VALUE':>16}" f"{'ERROR VS CRR':>18}")
 
 print(SUBLINE)
 
 for model_type, method_value in call_methods:
 
-    error = (
-        method_value
-        - benchmark_call
-    )
+    error = method_value - benchmark_call
 
-    print(
-        f"{model_type_name(model_type):<40}"
-        f"{method_value:16.8f}"
-        f"{error:18.8f}"
-    )
+    print(f"{model_type_name(model_type):<40}" f"{method_value:16.8f}" f"{error:18.8f}")
 
 
 # ============================================================================
@@ -927,14 +858,12 @@ print("\n" + LINE)
 print("8. EARLY-EXERCISE PREMIUM VERSUS STOCK PRICE")
 print(LINE)
 
-put_exercise_premiums = (
-    np.asarray(american_put_values)
-    - np.asarray(european_put_values)
+put_exercise_premiums = np.asarray(american_put_values) - np.asarray(
+    european_put_values
 )
 
-call_exercise_premiums = (
-    np.asarray(american_call_values)
-    - np.asarray(european_call_values)
+call_exercise_premiums = np.asarray(american_call_values) - np.asarray(
+    european_call_values
 )
 
 plt.figure(figsize=(9, 6))
@@ -1005,10 +934,7 @@ for model_type, _ in put_methods:
             plot_model,
         )
 
-        errors.append(
-            approximation_value
-            - benchmark_value
-        )
+        errors.append(approximation_value - benchmark_value)
 
     plt.figure(figsize=(9, 6))
 
@@ -1024,10 +950,7 @@ for model_type, _ in put_methods:
 
     plt.xlabel("Stock Price")
     plt.ylabel("Approximation - CRR")
-    plt.title(
-        "American Put Approximation Error: "
-        + model_type_name(model_type)
-    )
+    plt.title("American Put Approximation Error: " + model_type_name(model_type))
 
     plt.grid(True)
     plt.show()
@@ -1082,18 +1005,11 @@ for q in dividend_yields:
         plot_model,
     )
 
-    european_values.append(
-        european_value
-    )
+    european_values.append(european_value)
 
-    american_values.append(
-        american_value
-    )
+    american_values.append(american_value)
 
-    exercise_premiums.append(
-        american_value
-        - european_value
-    )
+    exercise_premiums.append(american_value - european_value)
 
 
 plt.figure(figsize=(9, 6))
@@ -1239,9 +1155,7 @@ time_call_values = []
 
 for days in days_to_expiry:
 
-    moving_value_dt = expiry_dt.add_days(
-        -int(days)
-    )
+    moving_value_dt = expiry_dt.add_days(-int(days))
 
     moving_discount_curve = FlatDiscountCurve(
         moving_value_dt,
@@ -1450,12 +1364,7 @@ tree_put_values = []
 tree_call_values = []
 tree_times = []
 
-print(
-    f"{'STEPS':>10}"
-    f"{'PUT':>18}"
-    f"{'CALL':>18}"
-    f"{'TIME':>18}"
-)
+print(f"{'STEPS':>10}" f"{'PUT':>18}" f"{'CALL':>18}" f"{'TIME':>18}")
 
 print(SUBLINE)
 
@@ -1487,24 +1396,13 @@ for steps in tree_steps:
 
     elapsed = time.time() - start
 
-    tree_put_values.append(
-        put_value
-    )
+    tree_put_values.append(put_value)
 
-    tree_call_values.append(
-        call_value
-    )
+    tree_call_values.append(call_value)
 
-    tree_times.append(
-        elapsed
-    )
+    tree_times.append(elapsed)
 
-    print(
-        f"{steps:10d}"
-        f"{put_value:18.8f}"
-        f"{call_value:18.8f}"
-        f"{elapsed:18.8f}"
-    )
+    print(f"{steps:10d}" f"{put_value:18.8f}" f"{call_value:18.8f}" f"{elapsed:18.8f}")
 
 
 plt.figure(figsize=(9, 6))
@@ -1538,11 +1436,7 @@ print("\n" + LINE)
 print("16. COMPUTATIONAL SPEED COMPARISON")
 print(LINE)
 
-print(
-    f"{'METHOD':<40}"
-    f"{'VALUE':>18}"
-    f"{'TIME':>18}"
-)
+print(f"{'METHOD':<40}" f"{'VALUE':>18}" f"{'TIME':>18}")
 
 print(SUBLINE)
 
@@ -1571,11 +1465,7 @@ for steps in [
 
     elapsed = time.time() - start
 
-    print(
-        f"{'CRR ' + str(steps):<40}"
-        f"{method_value:18.8f}"
-        f"{elapsed:18.8f}"
-    )
+    print(f"{'CRR ' + str(steps):<40}" f"{method_value:18.8f}" f"{elapsed:18.8f}")
 
 
 for model_type, _ in put_methods:
@@ -1598,9 +1488,7 @@ for model_type, _ in put_methods:
     elapsed = time.time() - start
 
     print(
-        f"{model_type_name(model_type):<40}"
-        f"{method_value:18.8f}"
-        f"{elapsed:18.8f}"
+        f"{model_type_name(model_type):<40}" f"{method_value:18.8f}" f"{elapsed:18.8f}"
     )
 
 
@@ -1616,11 +1504,7 @@ method_value = american_put.value(
 
 elapsed = time.time() - start
 
-print(
-    f"{'LSMC':<40}"
-    f"{method_value:18.8f}"
-    f"{elapsed:18.8f}"
-)
+print(f"{'LSMC':<40}" f"{method_value:18.8f}" f"{elapsed:18.8f}")
 
 
 # ============================================================================
@@ -1680,12 +1564,7 @@ value_down = test_option.value(
     test_model,
 )
 
-delta_bump = (
-    value_up
-    - value_down
-) / (
-    2.0 * stock_bump
-)
+delta_bump = (value_up - value_down) / (2.0 * stock_bump)
 
 delta_function = test_option.delta(
     value_dt,
@@ -1695,45 +1574,21 @@ delta_function = test_option.delta(
     test_model,
 )
 
-delta_difference = (
-    delta_function
-    - delta_bump
-)
+delta_difference = delta_function - delta_bump
 
-print(
-    f"{'Base Value':<40}: "
-    f"{base_value:16.10f}"
-)
+print(f"{'Base Value':<40}: " f"{base_value:16.10f}")
 
-print(
-    f"{'Stock Bump':<40}: "
-    f"{stock_bump:16.10f}"
-)
+print(f"{'Stock Bump':<40}: " f"{stock_bump:16.10f}")
 
-print(
-    f"{'Value S + dS':<40}: "
-    f"{value_up:16.10f}"
-)
+print(f"{'Value S + dS':<40}: " f"{value_up:16.10f}")
 
-print(
-    f"{'Value S - dS':<40}: "
-    f"{value_down:16.10f}"
-)
+print(f"{'Value S - dS':<40}: " f"{value_down:16.10f}")
 
-print(
-    f"{'FinancePy Delta':<40}: "
-    f"{delta_function:16.10f}"
-)
+print(f"{'FinancePy Delta':<40}: " f"{delta_function:16.10f}")
 
-print(
-    f"{'Bump-and-Revalue Delta':<40}: "
-    f"{delta_bump:16.10f}"
-)
+print(f"{'Bump-and-Revalue Delta':<40}: " f"{delta_bump:16.10f}")
 
-print(
-    f"{'Difference':<40}: "
-    f"{delta_difference:16.10f}"
-)
+print(f"{'Difference':<40}: " f"{delta_difference:16.10f}")
 
 
 # ============================================================================
@@ -1757,13 +1612,7 @@ print("\n" + LINE)
 print("18. GAMMA BUMP-AND-REVALUE TEST")
 print(LINE)
 
-gamma_bump = (
-    value_up
-    - 2.0 * base_value
-    + value_down
-) / (
-    stock_bump * stock_bump
-)
+gamma_bump = (value_up - 2.0 * base_value + value_down) / (stock_bump * stock_bump)
 
 gamma_function = test_option.gamma(
     value_dt,
@@ -1773,25 +1622,13 @@ gamma_function = test_option.gamma(
     test_model,
 )
 
-gamma_difference = (
-    gamma_function
-    - gamma_bump
-)
+gamma_difference = gamma_function - gamma_bump
 
-print(
-    f"{'FinancePy Gamma':<40}: "
-    f"{gamma_function:16.10f}"
-)
+print(f"{'FinancePy Gamma':<40}: " f"{gamma_function:16.10f}")
 
-print(
-    f"{'Bump-and-Revalue Gamma':<40}: "
-    f"{gamma_bump:16.10f}"
-)
+print(f"{'Bump-and-Revalue Gamma':<40}: " f"{gamma_bump:16.10f}")
 
-print(
-    f"{'Difference':<40}: "
-    f"{gamma_difference:16.10f}"
-)
+print(f"{'Difference':<40}: " f"{gamma_difference:16.10f}")
 
 
 # ============================================================================
@@ -1802,8 +1639,7 @@ print("\n" + LINE)
 print("19. SUMMARY")
 print(LINE)
 
-print(
-    """
+print("""
 This example illustrates several important properties of American options.
 
 1. EUROPEAN VERSUS AMERICAN
@@ -1879,8 +1715,7 @@ This example illustrates several important properties of American options.
        LSMC
 
    in terms of both valuation accuracy and computational cost.
-"""
-)
+""")
 
 print(LINE)
 

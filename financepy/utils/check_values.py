@@ -4,6 +4,7 @@ import numpy as np
 from .date import Date
 from .error import FinError
 from .currency import g_ccy_names
+from .currency import g_ccy_names
 
 ###########################################################################
 # Validation for specific input types that handles arrays and scalars
@@ -20,6 +21,7 @@ def check_currency(ccy_name: str) -> None:
 
     if ccy_name not in g_ccy_names:
         raise FinError(f"Unsupported currency: {ccy_name}")
+
 
 ###########################################################################
 
@@ -40,6 +42,7 @@ def check_currency_pair(currency_pair: str) -> None:
 
     if ccy_1 == ccy_2:
         raise FinError("Currencies in pair must be different.")
+
 
 ###########################################################################
 
@@ -70,15 +73,15 @@ def check_curve_dt(value_dt: Date, *curves):
 
 ###########################################################################
 
+
 def check_num_paths(num_paths: int):
 
     if num_paths < 4:
         raise FinError("Number of paths must be at least 4.")
 
     if num_paths % 2 != 0:
-        raise FinError(
-            "Number of paths must be even when using antithetic variates."
-        )
+        raise FinError("Number of paths must be even when using antithetic variates.")
+
 
 ###########################################################################
 
@@ -144,6 +147,7 @@ def check_strike_price(strike_price: float):
 
 ########################################################################################
 
+
 def check_corr_matrix(
     corr_matrix: np.ndarray,
     num_assets: int,
@@ -186,25 +190,20 @@ def check_corr_matrix(
         raise FinError("Correlation matrix diagonal must equal one.")
 
     if np.any(np.abs(corr_matrix) > 1.0 + tol):
-        raise FinError(
-            "Correlation matrix entries must be between -1 and 1."
-        )
+        raise FinError("Correlation matrix entries must be between -1 and 1.")
 
     eigenvalues = np.linalg.eigvalsh(corr_matrix)
     min_eigenvalue = np.min(eigenvalues)
 
     if positive_definite:
         if min_eigenvalue <= tol:
-            raise FinError(
-                "Correlation matrix must be positive definite."
-            )
+            raise FinError("Correlation matrix must be positive definite.")
     elif min_eigenvalue < -tol:
-        raise FinError(
-            "Correlation matrix must be positive semi-definite."
-        )
+        raise FinError("Correlation matrix must be positive semi-definite.")
 
 
 ########################################################################################
+
 
 def check_shapes(*args):
     """Allow scalars and equal-length vectors."""

@@ -21,6 +21,8 @@ from ...utils.global_vars import CLEAN
 
 ########################################################################################
 
+MIN_SURVIVAL_PROB = 1.0e-12
+
 
 def f(q, *args):
     """Function that returns zero when the survival probability that gives a

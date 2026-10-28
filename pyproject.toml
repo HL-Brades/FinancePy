@@ -4,11 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "financepy"
-version = "1.1.2"
+version = "1.1.2.3"
 readme = "README.md"
 
 authors = [
-    {name = "Dominic O'Kane"}
+    {name = "Dominic O'Kane"},
+    {name = "Hernan Lobert"}
 ]
 
 license = "GPL-3.0-or-later"
@@ -19,22 +20,24 @@ keywords = ["FINANCE", "OPTIONS", "BONDS", "VALUATION", "DERIVATIVES"]
 description = "A Finance Securities Valuation Library"
 
 # Python compatibility must match NumPy / SciPy reality
-requires-python = ">=3.10,<3.15"
+requires-python = ">=3.13,<3.15"
 
 classifiers = [
     "Development Status :: 4 - Beta",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.14",
     "Operating System :: OS Independent",
 ]
 
 # 1. This is where your package list belongs
 dependencies = [
-    "numpy>=2.3.5,<2.4",
-    "scipy>=1.16.3,<1.17",
-    "pandas>=2.3.3,<=2.4",
-    "matplotlib>=3.10.6,<3.11",
-    "numba>=0.67.0,<0.68.0",
+    "numpy>=2.3.5,<=2.5.4", #2.5.4
+    "scipy>=1.16.3,<=1.18.1", #1.18.1
+    "pandas>=2.3.3,<=3.1.0", #3.1.0
+    "matplotlib>=3.10.6,<=3.11.2",
+    "numba>=0.67.0,<=0.68.0",
+    "cloudpickle>=3.1.2,<=3.2",
+    "xlwings>=0.37,<0.38",
 ]
 
 [project.optional-dependencies]

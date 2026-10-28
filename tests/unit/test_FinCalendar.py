@@ -151,6 +151,7 @@ def test_add_business_days_round_trip_from_business_days(cal_type):
                 f"then back gives {back}"
             )
 
+
 @pytest.mark.parametrize("cal_type", list(CalendarTypes))
 def test_adjust_none_returns_same_date(cal_type):
     cal = Calendar(cal_type)
@@ -231,6 +232,7 @@ def test_toronto_new_year_on_saturday_observed_on_monday():
     for y in [2011, 2022, 2028]:
         assert cal.is_holiday(Date(3, 1, y)), y
 
+
 def test_italy_st_francis_national_holiday_from_2026():
     cal = Calendar(CalendarTypes.ITALY)
 
@@ -239,7 +241,9 @@ def test_italy_st_francis_national_holiday_from_2026():
         assert cal.is_holiday(Date(4, 10, y)), y
 
     assert not cal.is_business_day(Date(4, 10, 2027))
-    assert cal.adjust(Date(4, 10, 2027), BusDayAdjustTypes.FOLLOWING) == Date(5, 10, 2027)
+    assert cal.adjust(Date(4, 10, 2027), BusDayAdjustTypes.FOLLOWING) == Date(
+        5, 10, 2027
+    )
 
     # It was a working day before then
     assert not cal.is_holiday(Date(4, 10, 2024))
@@ -281,6 +285,7 @@ def test_get_holiday_list_contains_only_holidays(cal_type):
         dt = date_from_string(holiday)
         assert cal.is_holiday(dt)
 
+
 @pytest.mark.parametrize("cal_type", list(CalendarTypes))
 @pytest.mark.parametrize("bd_type", list(BusDayAdjustTypes))
 def test_fast_adjust_matches_adjust(cal_type, bd_type):
@@ -288,11 +293,11 @@ def test_fast_adjust_matches_adjust(cal_type, bd_type):
     cal = Calendar(cal_type)
 
     dates = [
-        Date(31,1,2021),
-        Date(28,2,2021),
-        Date(24,12,2021),
-        Date(25,12,2021),
-        Date(31,12,2021),
+        Date(31, 1, 2021),
+        Date(28, 2, 2021),
+        Date(24, 12, 2021),
+        Date(25, 12, 2021),
+        Date(31, 12, 2021),
     ]
 
     for dt in dates:

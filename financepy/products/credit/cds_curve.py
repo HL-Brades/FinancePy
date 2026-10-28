@@ -58,7 +58,9 @@ class CDSCurve:
         contracts and a Ibor curve using the same recovery rate and the
         same interpolation method."""
 
-        print("Deprecation Warning: CDSCurve has been moved. Use version under market->curves")
+        print(
+            "Deprecation Warning: CDSCurve has been moved. Use version under market->curves"
+        )
 
         check_curve_dt(anchor_dt, libor_curve)
 
@@ -160,7 +162,9 @@ class CDSCurve:
             n = len(t)
             qs = np.zeros(n)
             for i in range(0, n):
-                qs[i] = _uinterpolate(t[i], self._times, self._qs, self.interp_method.value)
+                qs[i] = _uinterpolate(
+                    t[i], self._times, self._qs, self.interp_method.value
+                )
             return qs
         elif np.isscalar(t):
             q = _uinterpolate(t, self._times, self._qs, self.interp_method.value)

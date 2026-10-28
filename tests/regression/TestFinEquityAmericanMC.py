@@ -7,10 +7,13 @@ import add_fp_to_path
 from financepy.models.equity_lsmc import equity_lsmc, BoundaryFitTypes
 from financepy.models.equity_crr_tree import crr_tree_val
 from financepy.models.bs_european_analytic import european_value
+from financepy.models.bs_european_analytic import european_value
 from financepy.products.equity.equity_american_option import EquityAmericanOption
 
 
 from financepy.market.curves.flat_discount_curve import FlatDiscountCurve
+from financepy.models.bs_american_analytic import BlackScholesAlgorithmTypes
+from financepy.models.black_scholes import BlackScholes
 from financepy.models.bs_american_analytic import BlackScholesAlgorithmTypes
 from financepy.models.black_scholes import BlackScholes
 from financepy.utils.date import Date
@@ -44,6 +47,7 @@ def test_equity_american_option():
     num_steps = 100
 
     model = BlackScholes(volatility)
+    model = BlackScholes(volatility)
 
     value = put_option.value(
         value_dt, stock_price, discount_curve, dividend_curve, model
@@ -70,11 +74,16 @@ def test_equity_american_option():
     for num_steps in num_steps_list:
 
         model = BlackScholes(volatility)
+        model = BlackScholes(volatility)
 
         start = time.time()
 
         results = option.value(
-            value_dt, stock_price, discount_curve, dividend_curve, model,
+            value_dt,
+            stock_price,
+            discount_curve,
+            dividend_curve,
+            model,
             algo_type=BlackScholesAlgorithmTypes.CRR_TREE,
             num_steps_per_year=num_steps,
         )
@@ -91,6 +100,7 @@ def test_equity_american_option():
 
     for num_steps in num_steps_list:
 
+        model = BlackScholes(volatility)
         model = BlackScholes(volatility)
 
         start = time.time()
@@ -130,10 +140,15 @@ def test_equity_american_option():
     for num_steps in num_steps_list:
 
         model = BlackScholes(volatility)
+        model = BlackScholes(volatility)
         start = time.time()
 
         results = option.value(
-            value_dt, stock_price, discount_curve, dividend_curve, model,
+            value_dt,
+            stock_price,
+            discount_curve,
+            dividend_curve,
+            model,
             algo_type=BlackScholesAlgorithmTypes.CRR_TREE,
             num_steps_per_year=num_steps,
         )
@@ -150,11 +165,16 @@ def test_equity_american_option():
     for num_steps in num_steps_list:
 
         model = BlackScholes(volatility)
+        model = BlackScholes(volatility)
 
         start = time.time()
 
         results = option.value(
-            value_dt, stock_price, discount_curve, dividend_curve, model,
+            value_dt,
+            stock_price,
+            discount_curve,
+            dividend_curve,
+            model,
             algo_type=BlackScholesAlgorithmTypes.CRR_TREE,
             num_steps_per_year=num_steps,
         )
@@ -167,12 +187,20 @@ def test_equity_american_option():
         num_paths = 50000
 
         model = BlackScholes(volatility)
+        model = BlackScholes(volatility)
 
         start = time.time()
 
+        algo_type = BlackScholesAlgorithmTypes.LSMC
+
         results = option.value(
-            value_dt, stock_price, discount_curve, dividend_curve, model,
-            algo_type=BlackScholesAlgorithmTypes.LSMC, num_paths=num_paths
+            value_dt,
+            stock_price,
+            discount_curve,
+            dividend_curve,
+            model,
+            algo_type=BlackScholesAlgorithmTypes.LSMC,
+            num_paths=num_paths,
         )
 
         end = time.time()
@@ -187,11 +215,16 @@ def test_equity_american_option():
     for num_steps in num_steps_list:
 
         model = BlackScholes(volatility)
+        model = BlackScholes(volatility)
 
         start = time.time()
 
         results = option.value(
-            value_dt, stock_price, discount_curve, dividend_curve, model,
+            value_dt,
+            stock_price,
+            discount_curve,
+            dividend_curve,
+            model,
             algo_type=BlackScholesAlgorithmTypes.CRR_TREE,
             num_steps_per_year=num_steps,
         )
@@ -214,7 +247,7 @@ def test_equity_american_option():
             dividend_curve,
             model,
             algo_type=BlackScholesAlgorithmTypes.LSMC,
-            num_paths=50_000
+            num_paths=50_000,
         )
 
         end = time.time()
@@ -289,6 +322,7 @@ def replicate_ls_paper():
                     else:
                         euro_opt_type_value = OptionTypes.EUROPEAN_PUT.value
 
+                    v_eur = european_value(s, t, k, r, q, v, euro_opt_type_value)
                     v_eur = european_value(s, t, k, r, q, v, euro_opt_type_value)
 
                     print(

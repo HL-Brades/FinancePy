@@ -38,6 +38,7 @@ KAPPA = 365.0 / 360.0
         float64[:],
         float64[:],
         int64,
+        int64,
     ),
     fastmath=True,
     cache=True,
@@ -52,11 +53,12 @@ def risky_pv01_numba(
     np_surv_times,
     np_surv_values,
     pv01_method,
+    survival_interp_method,
 ):
     """Fast calculation of the risky PV01 of a CDS using NUMBA.
     The output is a numpy array of the full and clean risky PV01."""
 
-    method = InterpTypes.FLAT_FWD_RATES.value
+    discount_method = InterpTypes.FLAT_FWD_RATES.value
     debug = False
 
     if debug:
@@ -74,67 +76,97 @@ def risky_pv01_numba(
     # accrued is treated as though on average default occurs roughly midway
     # through a cpn period.
 
-    t_ncd = payment_times[0]
+    # A single cash flow still requires interpolation at its payment time.
+    if payment_times.size == 1:
+        q1 = _uinterpolate(
+            payment_times[0], np_surv_times, np_surv_values, survival_interp_method
+        )
+        z1 = _uinterpolate(
+            payment_times[0], np_ibor_times, np_ibor_values, discount_method
+        )
+        dirty_rpv01 = q1 * z1 * year_fracs[0]
+        clean_rpv01 = dirty_rpv01 - accrual_factor_pcd_to_now
 
-    # The first cpn is a special case which needs to be handled carefully
-    # taking into account what cpn has already accrued and what has not
-    qeff = _uinterpolate(t_eff, np_surv_times, np_surv_values, method)
-    q1 = _uinterpolate(t_ncd, np_surv_times, np_surv_values, method)
-    z1 = _uinterpolate(t_ncd, np_ibor_times, np_ibor_values, method)
+    # else we have more than one cash flow and we need to interpolate the survival probability and discount
+    # factor for the first cash flow
+    else:
+        t_ncd = payment_times[0]
 
-    # The accrual factor of the current cpn period, from the previous cpn
-    # date to the next cpn date. The entries of year_fracs are aligned with
-    # payment_times so index 0 is the current period.
-    accrual_factor_ncd = year_fracs[0]
+        # The first cpn is a special case which needs to be handled carefully
+        # taking into account what cpn has already accrued and what has not
+        q1 = _uinterpolate(t_ncd, np_surv_times, np_surv_values, survival_interp_method)
+        z1 = _uinterpolate(t_ncd, np_ibor_times, np_ibor_values, discount_method)
 
-    # this is the part of the cpn accrued from previous cpn date to now
-    # accrual_factor_pcd_to_now = day_count.year_frac(pcd,teff)
-    # reference credit survives to the premium payment date
-    dirty_rpv01 = q1 * z1 * accrual_factor_ncd
+        # this is the part of the cpn accrued from previous cpn date to now
+        # accrual_factor_pcd_to_now = day_count.year_frac(pcd,teff)
+        # reference credit survives to the premium payment date
+        dirty_rpv01 = q1 * z1 * year_fracs[1]
 
-    # cpn accrued from previous cpn to today paid in full at default
-    # before cpn payment
-    dq = qeff - q1
-    dirty_rpv01 += z1 * dq * accrual_factor_pcd_to_now * cpn_accd_indicator
+        # cpn accrued from previous cpn to today paid in full at default
+        # before cpn payment
+        qeff = _uinterpolate(
+            t_eff, np_surv_times, np_surv_values, survival_interp_method
+        )
+        dq = qeff - q1
+        dirty_rpv01 += z1 * dq * accrual_factor_pcd_to_now * cpn_accd_indicator
 
-    # future accrued from now to cpn payment date assuming default roughly
-    # midway
-    dirty_rpv01 += 0.5 * z1 * dq * (accrual_factor_ncd - accrual_factor_pcd_to_now) * cpn_accd_indicator
+        # future accrued from now to cpn payment date assuming default roughly
+        # midway
+        dirty_rpv01 += (
+            0.5
+            * z1
+            * dq
+            * (year_fracs[1] - accrual_factor_pcd_to_now)
+            * cpn_accd_indicator
+        )
 
-    for it in range(1, len(payment_times)):
+        for it in range(1, len(payment_times)):
+            t2 = payment_times[it]
+            q2 = _uinterpolate(
+                t2, np_surv_times, np_surv_values, survival_interp_method
+            )
+            z2 = _uinterpolate(t2, np_ibor_times, np_ibor_values, discount_method)
+            accrual_factor = year_fracs[it]
+            # full cpn is paid at the end of the current period if survives
+            dirty_rpv01 += q2 * z2 * accrual_factor
+            #        print(it, t2, z2, q2, accrual_factor, full_rpv01)
 
-        t2 = payment_times[it]
-        q2 = _uinterpolate(t2, np_surv_times, np_surv_values, method)
-        z2 = _uinterpolate(t2, np_ibor_times, np_ibor_values, method)
-        accrual_factor = year_fracs[it]
+            #######################################################################
+            # The following code calculates the contribution to the dirty_rpv01 from the accrued interest in the
+            # current period. This is only relevant if the cpn_accd_indicator is set to 1, which indicates that
+            # we are considering the accrued interest in the calculation of the risky PV01.
+            #######################################################################
+            if cpn_accd_indicator == 1:
+                if USE_FLAT_HAZARD_RATE_INTEGRAL:
+                    # This needs to be updated to handle small h+r
+                    tau = accrual_factor
+                    h12 = -np.log(q2 / q1) / tau
+                    r12 = -np.log(z2 / z1) / tau
+                    alpha = h12 + r12
+                    exp_term = (
+                        1.0 - np.exp(-alpha * tau) - alpha * tau * np.exp(-alpha * tau)
+                    )
+                    d_dirty_rpv01 = (
+                        q1 * z1 * h12 * exp_term / abs(alpha * alpha + 1e-20)
+                    )
+                else:
+                    d_dirty_rpv01 = 0.50 * (q1 - q2) * z2 * accrual_factor
+                # update the dirty_rpv01 with the contribution from the accrued interest
+                dirty_rpv01 = dirty_rpv01 + d_dirty_rpv01
+            # update discount rate, z and survival probability, q, for next iteration
+            q1 = q2
+            z1 = z2
 
-        # full cpn is paid at the end of the current period if survives
-        dirty_rpv01 += q2 * z2 * accrual_factor
+        # The clean_rpv01 is the dirty_rpv01 minus the accrual factor from the previous coupon date to now.
+        # This is because the clean_rpv01 does not include the accrued interest, while the dirty_rpv01 does.
+        # The clean_rpv01 is used to calculate the risky PV01 of a CDS contract, which is the present value of
+        # a risky one dollar paid on the premium leg of a CDS contract.
+        clean_rpv01 = dirty_rpv01 - accrual_factor_pcd_to_now
 
-        #        print(it, t2, z2, q2, accrual_factor, full_rpv01)
-
-        #######################################################################
-
-        if cpn_accd_indicator == 1:
-
-            if USE_FLAT_HAZARD_RATE_INTEGRAL:
-                # This needs to be updated to handle small h+r
-                tau = accrual_factor
-                h12 = -np.log(q2 / q1) / tau
-                r12 = -np.log(z2 / z1) / tau
-                alpha = h12 + r12
-                exp_term = 1.0 - np.exp(-alpha * tau) - alpha * tau * np.exp(-alpha * tau)
-                d_dirty_rpv01 = q1 * z1 * h12 * exp_term / abs(alpha * alpha + 1e-20)
-            else:
-                d_dirty_rpv01 = 0.50 * (q1 - q2) * z2 * accrual_factor
-
-            dirty_rpv01 = dirty_rpv01 + d_dirty_rpv01
-
-        q1 = q2
-        z1 = z2
-
-    clean_rpv01 = dirty_rpv01 - accrual_factor_pcd_to_now
-
+    # We return a numpy array with the dirty_rpv01 and clean_rpv01. The dirty_rpv01 is the present value of a
+    # risky one dollar paid on the premium leg of a CDS contract, including the accrued interest. The
+    # clean_rpv01 is the present value of a risky one dollar paid on the premium leg of a CDS contract,
+    # excluding the accrued interest.
     v = np.array([0.0, 0.0])
     v[DIRTY] = dirty_rpv01
     v[CLEAN] = clean_rpv01
@@ -155,6 +187,7 @@ def risky_pv01_numba(
         float64,
         int64,
         int64,
+        int64,
     ),
     fastmath=True,
     cache=True,
@@ -169,6 +202,7 @@ def prot_leg_pv_numba(
     contract_recovery_rate,
     num_steps_per_year,
     prot_method,
+    survival_interp_method,
 ):
     """Fast calculation of the CDS protection leg PV using NUMBA to speed up
     the numerical integration over time."""
@@ -176,14 +210,14 @@ def prot_leg_pv_numba(
     if t_eff < 0.0:
         raise FinError("Error: Protection leg starts in past: t_eff < 0")
 
-    method = InterpTypes.FLAT_FWD_RATES.value
+    discount_method = InterpTypes.FLAT_FWD_RATES.value
     dt = 1.0 / num_steps_per_year
     num_steps = int((t_mat - t_eff) * num_steps_per_year + 0.50)
     dt = (t_mat - t_eff) / num_steps
 
     t = t_eff
-    z1 = _uinterpolate(t, np_ibor_times, np_ibor_values, method)
-    q1 = _uinterpolate(t, np_surv_times, np_surv_values, method)
+    z1 = _uinterpolate(t, np_ibor_times, np_ibor_values, discount_method)
+    q1 = _uinterpolate(t, np_surv_times, np_surv_values, survival_interp_method)
 
     prot_pv = 0.0
     small = 1e-8
@@ -193,10 +227,10 @@ def prot_leg_pv_numba(
         log_z1 = np.log(z1)
         log_q1 = np.log(q1)
 
-        for _ in range(0, num_steps):
+        for _ in range(num_steps):
             t = t + dt
-            z2 = _uinterpolate(t, np_ibor_times, np_ibor_values, method)
-            q2 = _uinterpolate(t, np_surv_times, np_surv_values, method)
+            z2 = _uinterpolate(t, np_ibor_times, np_ibor_values, discount_method)
+            q2 = _uinterpolate(t, np_surv_times, np_surv_values, survival_interp_method)
 
             log_z2 = np.log(z2)
             log_q2 = np.log(q2)
@@ -217,10 +251,10 @@ def prot_leg_pv_numba(
 
     else:
 
-        for _ in range(0, num_steps):
+        for _ in range(num_steps):
             t += dt
-            z2 = _uinterpolate(t, np_ibor_times, np_ibor_values, method)
-            q2 = _uinterpolate(t, np_surv_times, np_surv_values, method)
+            z2 = _uinterpolate(t, np_ibor_times, np_ibor_values, discount_method)
+            q2 = _uinterpolate(t, np_surv_times, np_surv_values, survival_interp_method)
             dq = q1 - q2
             dprot_pv = 0.5 * (z1 + z2) * dq
             prot_pv += dprot_pv

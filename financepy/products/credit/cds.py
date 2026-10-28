@@ -2,12 +2,13 @@
 # Copyright (C) 2018, 2019, 2020 Dominic O'Kane
 ##############################################################################
 
-from typing import Union
+# from typing import Union
 
 from copy import deepcopy
 import numpy as np
 
 from ...utils.date import Date
+from ...utils.date import count_months
 from ...utils.error import FinError
 from ...utils.calendar import Calendar, CalendarTypes
 from ...utils.calendar import BusDayAdjustTypes, DateGenRuleTypes
@@ -49,7 +50,8 @@ class CDS:
     def __init__(
         self,
         step_in_dt: Date,  # Date protection starts
-        maturity_dt_or_tenor: Union[Date, str],  # Date or tenor
+        # maturity_dt_or_tenor: Union[Date, str],  # Date or tenor
+        maturity_dt_or_tenor: Date | str,  # Date or tenor
         running_cpn: float,  # Annualised cpn on premium fee leg
         notional: float = ONE_MILLION,
         long_protect: bool = True,
@@ -58,6 +60,8 @@ class CDS:
         cal_type: CalendarTypes | list | tuple = CalendarTypes.WEEKEND,
         bd_type: BusDayAdjustTypes = BusDayAdjustTypes.FOLLOWING,
         dg_type: DateGenRuleTypes = DateGenRuleTypes.BACKWARD,
+        # Previous coupon date for first accrual period
+        prev_coupon_dt: Date | None = None,
     ) -> None:
         """Create a CDS from the step-in date, maturity date and cpn"""
 
@@ -75,21 +79,28 @@ class CDS:
         if step_in_dt > maturity_dt:
             raise FinError("Step in date after maturity date")
 
-        self.step_in_dt = step_in_dt
-        self.maturity_dt = maturity_dt
-        self.running_cpn = running_cpn
-        self.notional = notional
-        self.long_protect = long_protect
-        self.accrual_dc_type = accrual_dc_type
-        self.dg_type = dg_type
-        self.cal_type = cal_type
-        self.freq_type = freq_type
-        self.bd_type = bd_type
+        self.step_in_dt: Date = step_in_dt
+        self.maturity_dt: Date = maturity_dt
+        self.running_cpn: float = running_cpn
+        self.notional: float = notional
+        self.long_protect: bool = long_protect
+        self.accrual_dc_type: DayCountTypes = accrual_dc_type
+        self.dg_type: DateGenRuleTypes = dg_type
+        self.cal_type: CalendarTypes | list | tuple = cal_type
+        self.freq_type: FrequencyTypes = freq_type
+        self.bd_type: BusDayAdjustTypes = bd_type
+        # by HH
+        if prev_coupon_dt is None:
+            self.prev_coupon_dt: Date | None = None
+        elif prev_coupon_dt > step_in_dt:
+            raise FinError("Previous coupon date after step in date")
+        else:
+            self.prev_coupon_dt: Date | None = prev_coupon_dt
 
         self._generate_adjusted_cds_payment_dts()
         self._calc_flows()
 
-    ####################################################################################
+    ###########################################################################
 
     def _generate_adjusted_cds_payment_dts(self):
         """Generate CDS payment dates which have been holiday adjusted."""
@@ -101,16 +112,44 @@ class CDS:
         self.payment_dts = []
         self.accrual_start_dts = []
         self.accrual_end_dts = []
-        num_months = int(12.0 / frequency)
+        # if frequency is zero, we calculate the number of months between start and maturity
+        if frequency == 0:
+            num_months = count_months(start_dt, self.maturity_dt)
+        # if frequency is positive, the number of months between each coupon date is
+        # 12 divided by the frequency
+        elif frequency > 0:
+            num_months = int(12.0 / frequency)
+        # anythign else is invalid. Raise an error
+        else:
+            raise FinError("Invalid frequency")
 
         # We generate unadjusted dates - not adjusted for weekends or holidays
         unadjusted_schedule_dts = []
 
-        if self.dg_type == DateGenRuleTypes.BACKWARD:
+        # =======
+        # if the frequency is zero or negative, we set the last date to be the start date
+        if frequency == 0:
+            # last date
+            unadjusted_schedule_dts.append(self.maturity_dt)
+            # first date
+            if self.prev_coupon_dt is None:
+                unadjusted_schedule_dts.append(self.step_in_dt)
+            else:
+                unadjusted_schedule_dts.append(min(self.prev_coupon_dt, start_dt))
+
+            # now we adjust for holiday using business day adjustment
+            # convention specified
+            adjusted_dts = []
+            for date in reversed(unadjusted_schedule_dts):
+                adjusted = calendar.adjust(date, self.bd_type)
+                adjusted_dts.append(adjusted)
+
+        # =======
+        # standard CDS rule - backward generation of dates from maturity to start date
+        elif self.dg_type == DateGenRuleTypes.BACKWARD:
 
             # We start at end date and step backwards
             next_dt = self.maturity_dt
-
             unadjusted_schedule_dts.append(next_dt)
 
             # the unadjusted dates start at end date and end at previous cpn date
@@ -118,8 +157,15 @@ class CDS:
                 next_dt = next_dt.add_months(-num_months)
                 unadjusted_schedule_dts.append(next_dt)
 
-            # now we adjust for holiday using business day adjustment
-            # convention specified
+            # force the first date to be the one given by the user if not None
+            if self.prev_coupon_dt is not None:
+                # if the first date is after the start date, then we make equal to the start date
+                unadjusted_schedule_dts[-1] = min(self.prev_coupon_dt, start_dt)
+            else:  # if none was given then use the last next_dt
+                # if the first date is after the start date, then we make equal to the start date
+                unadjusted_schedule_dts[-1] = min(unadjusted_schedule_dts[-1], start_dt)
+            self.temp = unadjusted_schedule_dts
+            # now we adjust for holiday using business day adjustment convention specified
             adjusted_dts = []
 
             for date in reversed(unadjusted_schedule_dts):
@@ -131,11 +177,18 @@ class CDS:
         # Acc Start = [22-DEC-2008, 20-MAR-2009, 22-JUN-2009, 21-SEP-2009, 21-DEC-2009]
         # Acc End   = [19-MAR-2009, 21-JUN-2009, 20-SEP-2009, 20-DEC-2009, 20-MAR-2010]
 
+        # =======
+        # forward CDS rule
         elif self.dg_type == DateGenRuleTypes.FORWARD:
 
             # We start at start date and step forwards
-
-            next_dt = start_dt
+            # force the first date to be the one given by the user if not None
+            if self.prev_coupon_dt is not None:
+                next_dt = self.prev_coupon_dt
+            else:  # it is the start date
+                next_dt = start_dt
+            # check if the first date is before the start date, then we make equal to the start date
+            next_dt = min(next_dt, start_dt)
 
             # the unadjusted dates start at start date and end at last date
             # before maturity date
@@ -156,6 +209,8 @@ class CDS:
         # Accrual Start = [20-FEB-2009, 20-MAY-2009, 20-AUG-2009, 20-NOV-2009]
         # Accrual End   = [19-MAY-2009, 19-AUG-2009, 19-NOV-2009, 20-MAR-2010]
 
+        # =======
+        # no rule was given, so we raise an error
         else:
             raise FinError("Unknown DATE_GEN_RULEType:" + str(self.dg_type))
 
@@ -209,34 +264,95 @@ class CDS:
         an issuer curve and a contract recovery rate."""
         check_curve_dt(value_dt, issuer_curve)
 
-        rpv01 = self.rpv01(value_dt, issuer_curve, pv01_method)
+        # se for bullet CDS
+        if self.freq_type == FrequencyTypes.ZERO:
+            # Calculate the PV of the premium for bullet CDS
+            dirty_pv, clean_pv = self.value_by_HH(
+                value_dt,
+                issuer_curve,
+                contract_recovery_rate,
+                pv01_method,
+                prot_method,
+                num_steps_per_year,
+            )
+        # se nao for bullet CDS, entao calcula o PV do premium usando o metodo RPV01
+        else:
+            # Calculate the PV of the premium using the RPV01 method
+            # Calculate the risky PV01 of the CDS contract using the specified method
+            rpv01 = self.rpv01(value_dt, issuer_curve, pv01_method)
+            dirty_rpv01 = rpv01[DIRTY]
+            clean_rpv01 = rpv01[CLEAN]
 
-        dirty_rpv01 = rpv01[DIRTY]
-        clean_rpv01 = rpv01[CLEAN]
+            # Calculate the PV of the protection leg of the CDS
+            prot_pv = self.prot_leg_pv(
+                value_dt,
+                issuer_curve,
+                contract_recovery_rate,
+                num_steps_per_year,
+                prot_method,
+            )
 
-        prot_pv = self.prot_leg_pv(
+            fwd_df = 1.0
+
+            if self.long_protect:
+                omega = +1
+            else:
+                omega = -1
+
+            dirty_pv = (
+                fwd_df
+                * omega
+                * (prot_pv - self.running_cpn * dirty_rpv01 * self.notional)
+            )
+
+            clean_pv = (
+                fwd_df
+                * omega
+                * (prot_pv - self.running_cpn * clean_rpv01 * self.notional)
+            )
+
+        return (dirty_pv, clean_pv)
+
+    # by HH ###################################################################
+
+    def value_by_HH(
+        self,
+        value_dt,
+        issuer_curve,
+        contract_recovery_rate,
+        pv01_method=0,
+        prot_method=0,
+        num_steps_per_year=GLOB_NUM_STEPS_PER_YEAR,
+    ):
+        """Valuation of a CDS contract on a specific valuation date given
+        an issuer curve and a contract recovery rate."""
+        # checa se a data de valoracao eh menor que a data da curva
+        check_curve_dt(value_dt, issuer_curve)
+        # calcula a perna de protecao do CDS
+        prot_pv = self.prot_leg_pv_plus_accrual(
             value_dt,
             issuer_curve,
             contract_recovery_rate,
             num_steps_per_year,
             prot_method,
         )
-
-        fwd_df = 1.0
-
+        # calcula a perna de premio do CDS
+        prm_pv = self.premium_leg_pv_by_HH(
+            value_dt,
+            issuer_curve,
+            contract_recovery_rate,
+        )
+        # verifica se eh uma compra (long) ou venda (short) de protecao
         if self.long_protect:
             omega = +1
         else:
             omega = -1
 
-        dirty_pv = (
-            fwd_df * omega * (prot_pv - self.running_cpn * dirty_rpv01 * self.notional)
-        )
-
-        clean_pv = (
-            fwd_df * omega * (prot_pv - self.running_cpn * clean_rpv01 * self.notional)
-        )
-
+        # calcula o PV sujo e o PV limpo do CDS
+        clean_pv = omega * (prot_pv - prm_pv)
+        dirty_pv = clean_pv + self.accrued_interest(value_dt)
+        # retorna os valores
+        # old by HH: return {"dirty_pv": dirty_pv, "clean_pv": clean_pv}
         return (dirty_pv, clean_pv)
 
     ###########################################################################
@@ -416,8 +532,8 @@ class CDS:
         settle_dt: Date,
         issuer_curve: CDSCurve,
         contract_recovery_rate: float,
-        pv01_method=0,
-        prot_method=0,
+        pv01_method: int = 0,
+        prot_method: int = 0,
         num_steps_per_year: int = GLOB_NUM_STEPS_PER_YEAR,
     ):
         """Return clean percentage PV expressed on T+3 settlement date."""
@@ -569,11 +685,9 @@ class CDS:
         check_curve_dt(value_dt, issuer_curve)
 
         t_eff = (self.step_in_dt - value_dt) / G_DAYS_IN_YEAR
-
         # An existing contract may have protection which as of now started in the past
         # We need to ensure that looking forward the protection starts immediately
-        if t_eff < 0.0:
-            t_eff = 0.0
+        t_eff = max(t_eff, 0.0)
 
         t_mat = (self.maturity_dt - value_dt) / G_DAYS_IN_YEAR
 
@@ -589,9 +703,33 @@ class CDS:
             contract_recovery_rate,
             num_steps_per_year,
             prot_method,
+            issuer_curve.interp_method.value,
         )
 
         return v * self.notional
+
+    # by HH ###################################################################
+
+    def prot_leg_pv_plus_accrual(
+        self,
+        value_dt: Date,
+        issuer_curve: CDSCurve,
+        contract_recovery_rate: float = STANDARD_RECOVERY_RATE,
+        num_steps_per_year: int = GLOB_NUM_STEPS_PER_YEAR,
+        prot_method=0,
+    ):
+        """Calculates the protection leg PV of the CDS by calling into the
+        fast NUMBA code that has been defined above."""
+        valor = self.prot_leg_pv(
+            value_dt,
+            issuer_curve,
+            contract_recovery_rate,
+            num_steps_per_year,
+            prot_method,
+        )
+
+        # adicionar o accrual do cupom atual e retorna
+        return valor + self.accrued_interest(value_dt)
 
     ###########################################################################
 
@@ -621,34 +759,41 @@ class CDS:
         """The risky_pv01 is the present value of a risky one dollar paid on
         the premium leg of a CDS contract."""
 
+        # check if the value date is before the anchor date of the curve. If it is, we raise an error
         check_curve_dt(value_dt, issuer_curve)
-
         libor_curve = issuer_curve.libor_curve
 
+        # We calculate the payment times from the value date to each of the payment dates.
+        # We ignore any payment dates which have already passed.
         payment_times = []
         for date in self.payment_dts:
             t = (date - value_dt) / G_DAYS_IN_YEAR
-
+            # if future date, then we add to the list of payment times. If not, we ignore it
             if t > 0.0:
                 payment_times.append(t)
 
-        # this is the part of the cpn accrued from the previous cpn date to now
-
-        pcd, start_index = self.get_pcd(value_dt)
-
-        day_count = DayCount(self.accrual_dc_type)
-
+        # effective date is the step in date of the CDS contract. This is the date when the protection
+        # starts. If the step in date is before the value date, then we set the effective date to be the
+        # value date. This is because we cannot have protection starting in the past. We can only have
+        # protection starting today or in the future.
         eff_dt = self.step_in_dt
-
         # A contract whose protection started in the past starts today
         eff_dt = max(eff_dt, value_dt)
-
-        accrual_factor_pcd_to_now = day_count.year_frac(pcd, eff_dt)[0]
-
-        year_fracs = self.accrual_factors[start_index:]
-
+        # day count fraction from the effective date to the value date
         t_eff = (eff_dt - value_dt) / G_DAYS_IN_YEAR
 
+        # accrual factor from the previous coupon date to now.
+        # This is used to calculate the accrued interest
+        day_count = DayCount(self.accrual_dc_type)
+        # this is the part of the cpn accrued from the previous cpn date to now
+        pcd, start_index = self.get_pcd(value_dt)
+        accrual_factor_pcd_to_now = day_count.year_frac(pcd, eff_dt)[0]
+        year_fracs = self.accrual_factors[start_index:]
+
+        # We call the NUMBA implementation of the risky PV01 calculation.
+        # This is a fast implementation that calculates the present value of a risky one dollar
+        # paid on the premium leg of a CDS contract. It takes into account the payment times,
+        # year fractions, discount factors, and survival probabilities from the issuer curve.
         value_rpv01 = risky_pv01_numba(
             t_eff,
             accrual_factor_pcd_to_now,
@@ -659,6 +804,7 @@ class CDS:
             issuer_curve._times,
             issuer_curve._qs,
             pv01_method,
+            issuer_curve.interp_method.value,
         )
 
         dirty_rpv01 = value_rpv01[DIRTY]
@@ -671,9 +817,48 @@ class CDS:
     def premium_leg_pv(self, value_dt: Date, issuer_curve: CDSCurve, pv01_method=0):
         """Value of the premium leg of a CDS."""
 
-        dirty_rpv01 = self.rpv01(value_dt, issuer_curve, pv01_method)[DIRTY]
-        v = dirty_rpv01 * self.notional * self.running_cpn
-        return v
+        frequency = int(annual_frequency(self.freq_type))
+
+        # check if the frequency is zero, if so, we return the accrued interest as the premium leg pv
+        if frequency == 0:
+            valor = self.premium_leg_pv_by_HH(value_dt, issuer_curve, pv01_method)
+
+        # if frequency is positive, we calculate the premium leg pv using the rpv01 method
+        elif frequency > 0:
+            dirty_rpv01 = self.rpv01(value_dt, issuer_curve, pv01_method)[DIRTY]
+            valor = dirty_rpv01 * self.notional * self.running_cpn
+
+        # anythign else is invalid. Raise an error
+        else:
+            raise FinError("Invalid frequency")
+
+        # end
+        return valor, frequency
+
+    # by HH ###################################################################
+
+    def premium_leg_pv_by_HH(
+        self, value_dt: Date, issuer_curve: CDSCurve, pv01_method=0
+    ):
+        """Value of the premium leg of a CDS."""
+        num_flows = len(self.payment_dts)
+        soma_npv = 0.0
+        # para cada fluxo, traz a valor presente pela curva
+        for it in range(num_flows):
+            # dado do cupom
+            dt = self.payment_dts[it]
+            # se a data do cupom for maior que o value date, entao adiciona os dados
+            if dt > value_dt:
+                # cupom
+                flow = self.flows[it]
+                # discount factor
+                z = issuer_curve.df(dt)
+                # survival probability
+                q = issuer_curve.survival_prob(dt)
+                # adiciona os dados na lista texto
+                soma_npv += flow * z * q
+        # retorna o NPV total
+        return soma_npv
 
     ###########################################################################
 
@@ -831,26 +1016,35 @@ class CDS:
         horizon = t_mat - t_eff
 
         def _dirty_and_clean_pv(
-            spread_, rate_: float, curve_recovery_: float, contract_recovery_: float
+            spread_: float | np.ndarray,
+            rate_: float | np.ndarray,
+            curve_recovery_: float | np.ndarray,
+            contract_recovery_: float | np.ndarray,
         ):
             """Dirty and clean PV under flat spread/rate/recovery inputs.
 
             All arguments broadcast; returns arrays of the broadcast shape.
             """
-            hazard_rate = KAPPA * spread_ / (1.0 - curve_recovery_)
-            decay_rate = rate_ + hazard_rate
+            hazard_rate = np.asarray(
+                KAPPA * spread_ / (1.0 - curve_recovery_), dtype=float
+            )
+            decay_rate = np.asarray(rate_ + hazard_rate, dtype=float)
 
             # Risky annuity: integral of exp(-decay_rate * t) over
             # [t_eff, t_mat]. Written with expm1 so it is stable as
             # decay_rate -> 0, where it tends to the horizon length. The
             # zero-decay elements are masked out of the division and
             # replaced with the exact limit.
-            x = decay_rate * horizon
+            x = np.asarray(decay_rate * horizon, dtype=float)
             is_zero = x == 0.0
             safe_decay = np.where(is_zero, 1.0, decay_rate)
-            annuity_per_df = np.where(is_zero, horizon, -np.expm1(-x) / safe_decay)
+            annuity_per_df = np.asarray(
+                np.where(is_zero, horizon, -np.expm1(-x) / safe_decay), dtype=float
+            )
 
-            risky_annuity = np.exp(-decay_rate * t_eff) * annuity_per_df
+            risky_annuity = (
+                np.asarray(np.exp(-decay_rate * t_eff), dtype=float) * annuity_per_df
+            )
 
             rpv01_dirty = risky_annuity * KAPPA + delta
             rpv01_clean = risky_annuity * KAPPA
@@ -920,7 +1114,7 @@ class CDS:
             "PAYMENT_DT      YEAR_FRAC      PAYMENT           DF       SURV_PROB      NPV"
         )
 
-        for it in range(0, num_flows):
+        for it in range(num_flows):
             dt = self.payment_dts[it]
 
             if dt > value_dt:
@@ -929,9 +1123,50 @@ class CDS:
                 z = issuer_curve.df(dt)
                 q = issuer_curve.survival_prob(dt)
                 print(
-                    "%15s %10.6f %12.2f %12.6f %12.6f %12.2f"
-                    % (dt, acc_factor, flow, z, q, flow * z * q)
+                    f"{dt!s:>15} {acc_factor:>10.6f} {flow:>12.2f} "
+                    f"{z:>12.6f} {q:>12.6f} {flow * z * q:>12.2f}"
+                    # OLD format:
+                    # "%15s %10.6f %12.2f %12.6f %12.6f %12.2f"
+                    # % (dt, acc_factor, flow, z, q, flow * z * q)
                 )
+
+    # by HH ####################################################################
+
+    def print_payments_by_HH(
+        self, value_dt: Date, issuer_curve: CDSCurve, full_flow: bool = False
+    ):
+        """We only print payments after the current valuation date"""
+        num_flows = len(self.payment_dts)
+        # cria a lista que vai receber os dados
+        texto = []
+        # cabecalho da tabela
+        texto.append(
+            "PAYMENT_dt      YEAR_FRAC      FLOW           DF       SURV_PROB      NPV"
+        )
+
+        for it in range(num_flows):
+            # dado do cupom
+            dt = self.payment_dts[it]
+            # se a data do cupom for maior que o value date ou se full_flow for True, entao adiciona os dados
+            if full_flow or dt > value_dt:
+                # fracao de ano
+                acc_factor = self.accrual_factors[it]
+                # fluxo financeiro?
+                flow = self.flows[it]
+                # discoun factor
+                z = issuer_curve.df(dt)
+                # survival probability
+                q = issuer_curve.survival_prob(dt)
+                # adiciona os dados na lista texto
+                texto.append(
+                    f"{dt!s:>15} {acc_factor:>10.6f} {flow:>12.2f} "
+                    f"{z:>12.6f} {q:>12.6f} {flow * z * q:>12.2f}"
+                    # OLD format:
+                    # "%15s %10.6f %12.2f %12.6f %12.6f %12.2f"
+                    # % (dt, acc_factor, flow, z, q, flow * z * q)
+                )
+        # retorna a tabela com os dados de cada fluxo do CDS
+        return texto
 
     ###########################################################################
 
@@ -971,4 +1206,4 @@ class CDS:
         print(self)
 
 
-########################################################################################
+################################################################################

@@ -1,5 +1,7 @@
 ##############################################################################
+##############################################################################
 # Copyright (C) 2018, 2019, 2020 Dominic O'Kane
+##############################################################################
 ##############################################################################
 
 import add_fp_to_path
@@ -15,14 +17,18 @@ from financepy.products.fx.fx_forward import FXForward, fx_forward_rate
 from FinTestCases import FinTestCases, global_test_case_mode
 
 
+
 test_cases = FinTestCases(__file__, global_test_case_mode)
 
+
+##############################################################################
 
 ##############################################################################
 
 
 def test_fin_fx_forward():
 
+    # Valuation date and currency pair.
     # Valuation date and currency pair.
     value_dt = Date(13, 2, 2018)
     currency_pair = "EURUSD"
@@ -52,8 +58,21 @@ def test_fin_fx_forward():
         value_dt,
         settlement_dt,
         eur_interest_rate,
+    notional_currency = "EUR"
+
+    ##########################################################################
+    # EUR discount curve: first currency in EURUSD.
+    ##########################################################################
+
+    euro_cal_type = CalendarTypes.TARGET
+
+    eur_depo = IborDeposit(
+        value_dt,
+        settlement_dt,
+        eur_interest_rate,
         DayCountTypes.ACT_360,
         notional,
+        euro_cal_type,
         euro_cal_type,
     )
 
@@ -74,8 +93,27 @@ def test_fin_fx_forward():
         value_dt,
         settlement_dt,
         usd_interest_rate,
+
+    foreign_curve = IborSingleCurve(
+        value_dt,
+        [eur_depo],
+        [],
+        [],
+    )
+
+    ##########################################################################
+    # USD discount curve: second currency in EURUSD.
+    ##########################################################################
+
+    usd_cal_type = CalendarTypes.NEW_YORK
+
+    usd_depo = IborDeposit(
+        value_dt,
+        settlement_dt,
+        usd_interest_rate,
         DayCountTypes.ACT_360,
         notional,
+        usd_cal_type,
         usd_cal_type,
     )
 
