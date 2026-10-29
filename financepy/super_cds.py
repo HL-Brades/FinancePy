@@ -34,9 +34,9 @@ import scipy.optimize as opt
 import xlwings as xw
 
 # uteis
-from . import utils_by_hh as ut
-
-# import cloudpickle
+# from importlib import import_module
+# ut = import_module(".utils_by_hh", package=__package__)
+from . import utils_by_HH as ut
 
 # financial functions
 from .market.curves.interpolator import InterpTypes
@@ -123,7 +123,7 @@ def carrega_curva_mercado(linha_debug=1):
     # verifica se uma das variaveis esta None. Se estiver coloca uma data antiga
     if curva_OIS is None or data_curva_juros is None:
         # neste caso, coloca hoje menos 30 dias
-        data_curva_juros = dt.datetime.now(tz=dt.timezone.utc) - dt.timedelta(days=30)
+        data_curva_juros = dt.datetime.now(tz=dt.UTC) - dt.timedelta(days=30)
         linha_debug = ut.print_debug(
             "debug",
             linha_debug,
@@ -133,9 +133,7 @@ def carrega_curva_mercado(linha_debug=1):
 
     # se a curva tem mais de 15 minutos atualiza toda a curva
     # senao usa a que acabou de ser carregada
-    if data_curva_juros < dt.datetime.now(tz=dt.timezone.utc) - dt.timedelta(
-        minutes=15
-    ):
+    if data_curva_juros < dt.datetime.now(tz=dt.UTC) - dt.timedelta(minutes=15):
         linha_debug = ut.print_debug(
             "debug", linha_debug, "   dados carregados muito antigos. Atualizando..."
         )
@@ -285,7 +283,7 @@ def carrega_curva_mercado(linha_debug=1):
     # marca a data que a curva de juros foi gerada
     # global data_curva_juros
     # atualiza a data da curva de juros
-    data_curva_juros = dt.datetime.now(tz=dt.timezone.utc)
+    data_curva_juros = dt.datetime.now(tz=dt.UTC)
 
     # serializa e grava a curva de juros na planilha para ser usada em outros calculos
     aba_USD_ISDA_OIS["data_curva_juros_ISDA"].value = data_curva_juros
