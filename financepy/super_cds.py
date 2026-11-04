@@ -529,17 +529,57 @@ def f_premio_cds(
     if isinstance(cds_flat_spread, np.ndarray):
         cds_flat_spread = cds_flat_spread[0].astype(float)
     # cria os vertices de CDS
-    cds3y = CDS(setp_in_date, "3Y", cds_flat_spread)
-    cds5y = CDS(setp_in_date, "5Y", cds_flat_spread)
-    cds7y = CDS(setp_in_date, "7Y", cds_flat_spread)
-    cds10y = CDS(setp_in_date, "10Y", cds_flat_spread)
+    cds3y = CDS(
+        setp_in_date,
+        "3Y",
+        cds_flat_spread,
+        freq_type=freq_type,
+        accrual_dc_type=DayCountTypes.ACT_360,
+        prev_coupon_dt=prev_coupon_dt,
+    )
+    cds5y = CDS(
+        setp_in_date,
+        "5Y",
+        cds_flat_spread,
+        freq_type=freq_type,
+        accrual_dc_type=DayCountTypes.ACT_360,
+        prev_coupon_dt=prev_coupon_dt,
+    )
+    cds7y = CDS(
+        setp_in_date,
+        "7Y",
+        cds_flat_spread,
+        freq_type=freq_type,
+        accrual_dc_type=DayCountTypes.ACT_360,
+        prev_coupon_dt=prev_coupon_dt,
+    )
+    cds10y = CDS(
+        setp_in_date,
+        "10Y",
+        cds_flat_spread,
+        freq_type=freq_type,
+        accrual_dc_type=DayCountTypes.ACT_360,
+        prev_coupon_dt=prev_coupon_dt,
+    )
     # Curva do CDS
     issuer_curve = CDSCurve(
-        trade_date, [cds3y, cds5y, cds7y, cds10y], curva_OIS, recovery_rate
+        trade_date,
+        [cds3y, cds5y, cds7y, cds10y],
+        curva_OIS,
+        recovery_rate,
+        DayCountTypes.ACT_360,
+        InterpTypes.FLAT_FWD_RATES,
     )
     # contrato de CDS
     cds_contract = CDS(
-        setp_in_date, maturity_date, running_coupon, notional, long_protection
+        setp_in_date,
+        maturity_date,
+        running_coupon,
+        notional,
+        long_protection,
+        freq_type=freq_type,
+        accrual_dc_type=DayCountTypes.ACT_360,
+        prev_coupon_dt=prev_coupon_dt,
     )
 
     """Calcula o premio do CDS e outros dados"""
@@ -549,7 +589,7 @@ def f_premio_cds(
     )
 
     """retorna o premio o CDS - clean value = cash amount (BBG)"""
-    return cds_value[1]  # "clean_pv"]
+    return cds_value  # [1]  # "clean_pv"]
 
 
 def f_auxiliar_cds_embutido(
@@ -562,9 +602,12 @@ def f_auxiliar_cds_embutido(
     recovery_rate: float,
     notional: float,
     long_protection: bool,
-    curva_OIS,
+    curva_OIS: OISCurve,
     premio_CDS_mercado: float,
     receita_desejada: float,
+    frequency_type: FrequencyTypes = FrequencyTypes.QUARTERLY,
+    prev_coupon_dt: Date | None = None,
+    accrual_dc_type: DayCountTypes = DayCountTypes.ACT_360,
 ) -> float:
     """Calcula o premio do CDS embutido na CLN, soma a receita deseja e desconta o premio do CDs de mercado
     obs.:
@@ -584,6 +627,9 @@ def f_auxiliar_cds_embutido(
         notional,
         long_protection,
         curva_OIS,
+        frequency_type,
+        prev_coupon_dt,
+        accrual_dc_type,
     )
     """retorna o liquido da venda do CDS no mercado + compra do CDS embutido na CLN
     + Receita desejada"""
@@ -644,7 +690,6 @@ def procura_preco_cds():
         aba_cashflow_CDS.range((11, coluna)).options(dates=dt.date).value
     )
     # t+1 do trade date
-    # old by HH: setp_in_date = trade_date.add_days(1)
     setp_in_date = from_datetime(
         aba_cashflow_CDS.range((22, coluna)).options(dates=dt.date).value
     )
@@ -652,8 +697,6 @@ def procura_preco_cds():
     settlement_date = from_datetime(
         aba_cashflow_CDS.range((23, coluna)).options(dates=dt.date).value
     )
-    # CDS Flat Spread negociado com o mercado - spread do CDS em percentual
-    # cds_flat_spread = (aba_cashflow_CDS.range((17, coluna)).value / 10000)
     # data de vencimento
     maturity_date = from_datetime(
         aba_cashflow_CDS.range((20, coluna)).options(dates=dt.date).value
@@ -666,6 +709,15 @@ def procura_preco_cds():
     long_protection = True  # True = compra CDS, False = vende CDS
     # recovery rate
     recovery_rate = aba_cashflow_CDS.range((25, coluna)).value
+    # coupons' frequency - take the integer part of the value in the cell and convert to FrequencyTypes
+    freq_type = FrequencyTypes(int(aba_cashflow_CDS.range((7, coluna)).value))
+    # data do inicio do accrual do cupom atual
+    if aba_cashflow_CDS.range((21, coluna)).value is None:
+        accrual_start_date = None
+    else:
+        accrual_start_date = from_datetime(
+            aba_cashflow_CDS.range((21, coluna)).options(dates=dt.date).value
+        )
 
     # premio do CDS de mercado - valor em moeda do up-front-cash
     premio_CDS_mercado = aba_cashflow_CDS.range((27, coluna)).value
@@ -681,6 +733,8 @@ def procura_preco_cds():
     )
 
     """faz o goal-seek para achar o valor do CDS que chegue no spread desejado"""
+    # procura o CDS Flat Spread embutido na CLN
+
     try:
         # OLD: options = {"disp": False, "xtol": 0.10, "maxfev": 100}
         options = {"disp": False, "maxiter": 100, "xtol": 0.000001, "maxfev": 100}
@@ -700,6 +754,8 @@ def procura_preco_cds():
                 curva_OIS,
                 premio_CDS_mercado,
                 receita_desejada,
+                freq_type,
+                accrual_start_date,
             ),
             method="hybr",
             tol=0.000001,  # tolerance of 1 cent
@@ -725,6 +781,8 @@ def procura_preco_cds():
                 notional,
                 long_protection,
                 curva_OIS,
+                freq_type,
+                accrual_start_date,
             )
         # nao achou nenhuma raiz
         else:
