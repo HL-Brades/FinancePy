@@ -4,6 +4,7 @@
 
 import numpy as np
 from scipy import optimize
+from typing import cast
 
 from ...utils.date import Date
 from ...utils.error import FinError
@@ -76,15 +77,13 @@ class CDSCurve:
         self.interp_method = interp_method
         self.built_ok = False
 
-        self._times = []
-        self._qs = []
+        self._times: np.ndarray = np.array([], dtype=float)
+        self._qs: np.ndarray = np.array([], dtype=float)
 
         if len(self.cds_contracts) > 0:
             self.build_curve()
         else:
             pass  # In some cases we allow None to be passed
-
-        return
 
     ###########################################################################
 
@@ -102,11 +101,11 @@ class CDSCurve:
     # def dfs(self):
     #     return self.libor_curve.dfs
 
-    def set_times(self, times: np.array):
+    def set_times(self, times: np.ndarray):
         """Set the times vector"""
         self._times = times
 
-    def set_qs(self, qvector: np.array):
+    def set_qs(self, qvector: np.ndarray):
         """Set the survival probability curve"""
         self._qs = qvector
 
@@ -144,32 +143,45 @@ class CDSCurve:
 
     ###########################################################################
 
-    def survival_prob(self, dt):
+    def survival_prob(self, dt: Date | float | list):
         """Extract the survival probability to date dt. This function
         supports vectorisation."""
 
+        # check the type of the input and convert to a time value in years
         if isinstance(dt, Date):
             t = (dt - self.anchor_dt) / G_DAYS_IN_YEAR
+        # or convert to a numpy array if a list is passed
         elif isinstance(dt, list):
             t = np.array(dt)
+        # otherwise we assume that a time value in years is passed
         else:
             t = dt
 
+        # check that the time is not negative
+        # this would indicate a survival date before the curve anchor date
         if np.any(t < 0.0):
             raise FinError("Survival Date before curve anchor date")
 
+        # an array of time values is passed so we return an array of survival probabilities
         if isinstance(t, np.ndarray):
             n = len(t)
             qs = np.zeros(n)
-            for i in range(0, n):
+            for i in range(n):
                 qs[i] = _uinterpolate(
                     t[i], self._times, self._qs, self.interp_method.value
                 )
             return qs
+        # just one time value is passed so we return a single value
         elif np.isscalar(t):
-            q = _uinterpolate(t, self._times, self._qs, self.interp_method.value)
+            q = _uinterpolate(
+                float(cast(float, t)),
+                self._times,
+                self._qs,
+                self.interp_method.value,
+            )
             return q
 
+        # by default we return an error if the input type is not recognised
         raise FinError("Unknown time type")
 
     ###########################################################################
@@ -201,7 +213,7 @@ class CDSCurve:
         self._times = np.array([0.0])
         self._qs = np.array([1.0])
 
-        for i in range(0, num_times):
+        for i in range(num_times):
 
             maturity_dt = self.cds_contracts[i].maturity_dt
 

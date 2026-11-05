@@ -24,6 +24,7 @@
 # time
 import datetime as dt
 import sys
+from typing import Any
 
 # math libs
 import numpy as np
@@ -356,7 +357,7 @@ def cds_single_name():
     # CDS Flat Spread negociado com o mercado - spread do CDS em percentual
     cds_flat_spread = aba_cashflow_CDS.range((17, coluna)).value / 10000
     # coupons' frequency - take the integer part of the value in the cell and convert to FrequencyTypes
-    freq_type = FrequencyTypes(int(aba_cashflow_CDS.range((7, coluna)).value))
+    freq_type = FrequencyTypes(int(aba_cashflow_CDS.range((27, coluna)).value))
     # data do inicio do accrual do cupom atual
     if aba_cashflow_CDS.range((21, coluna)).value is None:
         accrual_start_date = None
@@ -365,37 +366,50 @@ def cds_single_name():
             aba_cashflow_CDS.range((21, coluna)).options(dates=dt.date).value
         )
     # cria os vertices de CDS
+
+    # freq_type = FrequencyTypes(4)
+
     # cds6m = CDS(setp_in_date, "6M", cds_flat_spread)  # setp_in_date
     # cds1y = CDS(setp_in_date, "1Y", cds_flat_spread)
     # cds2y = CDS(setp_in_date, "2Y", cds_flat_spread)
-    cds3y = CDS(
-        setp_in_date,
-        "3Y",
-        cds_flat_spread,
-        freq_type=freq_type,
-        accrual_dc_type=DayCountTypes.ACT_360,
-        prev_coupon_dt=accrual_start_date,
-    )
+    # cds3y = CDS(
+    #    setp_in_date,
+    #    "3Y",
+    #    cds_flat_spread,
+    #    freq_type=freq_type,
+    #    accrual_dc_type=DayCountTypes.ACT_360,
+    #    prev_coupon_dt=accrual_start_date,
+    # )
     # cds4y = CDS(setp_in_date, "4Y", cds_flat_spread)
-    cds5y = CDS(
+    # cds5y = CDS(
+    #    setp_in_date,
+    #    "5Y",
+    #    cds_flat_spread,
+    #    freq_type=freq_type,
+    #    accrual_dc_type=DayCountTypes.ACT_360,
+    #    prev_coupon_dt=accrual_start_date,
+    # )
+    # cds7y = CDS(
+    #    setp_in_date,
+    #    "7Y",
+    #    cds_flat_spread,
+    #    freq_type=freq_type,
+    #    accrual_dc_type=DayCountTypes.ACT_360,
+    #    prev_coupon_dt=accrual_start_date,
+    # )
+    # cds10y = CDS(
+    #    setp_in_date,
+    #    "10Y",
+    #    cds_flat_spread,
+    #    freq_type=freq_type,
+    #    accrual_dc_type=DayCountTypes.ACT_360,
+    #    prev_coupon_dt=accrual_start_date,
+    # )
+    cds_unique = CDS(
         setp_in_date,
-        "5Y",
-        cds_flat_spread,
-        freq_type=freq_type,
-        accrual_dc_type=DayCountTypes.ACT_360,
-        prev_coupon_dt=accrual_start_date,
-    )
-    cds7y = CDS(
-        setp_in_date,
-        "7Y",
-        cds_flat_spread,
-        freq_type=freq_type,
-        accrual_dc_type=DayCountTypes.ACT_360,
-        prev_coupon_dt=accrual_start_date,
-    )
-    cds10y = CDS(
-        setp_in_date,
-        "10Y",
+        from_datetime(
+            aba_cashflow_CDS.range((20, coluna)).options(dates=dt.date).value
+        ),
         cds_flat_spread,
         freq_type=freq_type,
         accrual_dc_type=DayCountTypes.ACT_360,
@@ -406,13 +420,16 @@ def cds_single_name():
     assert curva_OIS is not None
     issuer_curve = CDSCurve(
         trade_date,
-        [cds3y, cds5y, cds7y, cds10y],
+        # [cds3y, cds5y, cds7y, cds10y],
+        [cds_unique],
         curva_OIS,
         recovery_rate,
         DayCountTypes.ACT_360,
         InterpTypes.FLAT_FWD_RATES,
     )
     linha_debug = ut.print_debug("debug", linha_debug, repr(issuer_curve), verbal_debug)
+
+    # freq_type = FrequencyTypes(int(aba_cashflow_CDS.range((27, coluna)).value))
 
     """Cria o contrato de CDS"""
     # maturity date do CDS. Sempre 20 de junho ou dezembro de cada ano
@@ -432,7 +449,8 @@ def cds_single_name():
         running_cpn=running_coupon,
         notional=notional,
         long_protect=long_protection,
-        freq_type=freq_type,
+        # freq_type=freq_type,
+        freq_type=FrequencyTypes(int(aba_cashflow_CDS.range((7, coluna)).value)),
         accrual_dc_type=DayCountTypes.ACT_360,
         prev_coupon_dt=accrual_start_date,
     )
@@ -447,42 +465,45 @@ def cds_single_name():
 
     """Calcula o premio do CDS e outros dados"""
     # up-front cash settlement
-    aba_cashflow_CDS.range((27, coluna)).value = cds_contract.cash_settlement_amount(
+    aba_cashflow_CDS.range((28, coluna)).value = cds_contract.cash_settlement_amount(
         trade_date, settlement_date, issuer_curve, recovery_rate
     )
     # cds_value = cds_contract.value_by_HH(trade_date, issuer_curve, recovery_rate)
     cds_value = cds_contract.value(trade_date, issuer_curve, recovery_rate)
     # dirty value
-    aba_cashflow_CDS.range((34, coluna)).value = cds_value[0]  # "dirty_pv"]
+    aba_cashflow_CDS.range((35, coluna)).value = cds_value[0]  # "dirty_pv"]
     # clean value
-    aba_cashflow_CDS.range((32, coluna)).value = cds_value[1]  # "clean_pv"]
-    # accrual: dias e juros
-    aba_cashflow_CDS.range((33, coluna + 1)).value = cds_contract.accrued_days(
+    aba_cashflow_CDS.range((33, coluna)).value = cds_value[1]  # "clean_pv"]
+    # accrual: dias e juros $
+    aba_cashflow_CDS.range((34, coluna + 1)).value = cds_contract.accrued_days(
         trade_date
     )
-    aba_cashflow_CDS.range((33, coluna)).value = cds_contract.accrued_interest(
+    aba_cashflow_CDS.range((34, coluna)).value = cds_contract.accrued_interest(
         trade_date
     )
     # premium leg
-    # aba_cashflow_CDS.range((35, coluna)).value = cds_contract.premium_leg_pv_by_HH(
+    # aba_cashflow_CDS.range((36, coluna)).value = cds_contract.premium_leg_pv_by_HH(
     #    trade_date, issuer_curve, recovery_rate
     # )
-    aba_cashflow_CDS.range((35, coluna)).value = cds_contract.premium_leg_pv(
+    aba_cashflow_CDS.range((36, coluna)).value = cds_contract.premium_leg_pv(
         trade_date, issuer_curve, recovery_rate
     )
-    # protection leg + Accrued Interest
-    # aba_cashflow_CDS.range((36, coluna)).value = cds_contract.prot_leg_pv_by_HH(
+    # protection leg
+    # aba_cashflow_CDS.range((37, coluna)).value = cds_contract.prot_leg_pv_by_HH(
     #    trade_date, issuer_curve, recovery_rate
     # )
-    aba_cashflow_CDS.range((36, coluna)).value = cds_contract.prot_leg_pv(
+    aba_cashflow_CDS.range((37, coluna)).value = cds_contract.prot_leg_pv(
         trade_date, issuer_curve, recovery_rate
     )
 
     # Extras by HH
-    aba_cashflow_CDS.range((38, coluna)).value = cds_contract.upfront(
+    aba_cashflow_CDS.range((38, coluna)).value = cds_contract.cash_settlement_amount(
         trade_date, settlement_date, issuer_curve, recovery_rate
     )
-    aba_cashflow_CDS.range((40, coluna)).value = cds_contract.premium_leg_pv_by_HH(
+    aba_cashflow_CDS.range((39, coluna)).value = cds_contract.upfront(
+        trade_date, settlement_date, issuer_curve, recovery_rate
+    )
+    aba_cashflow_CDS.range((41, coluna)).value = cds_contract.premium_leg_pv_by_HH(
         trade_date, issuer_curve, recovery_rate
     )
 
@@ -589,7 +610,7 @@ def f_premio_cds(
     )
 
     """retorna o premio o CDS - clean value = cash amount (BBG)"""
-    return cds_value  # [1]  # "clean_pv"]
+    return cds_value
 
 
 def f_auxiliar_cds_embutido(
@@ -611,7 +632,7 @@ def f_auxiliar_cds_embutido(
 ) -> float:
     """Calcula o premio do CDS embutido na CLN, soma a receita deseja e desconta o premio do CDs de mercado
     obs.:
-        - o premio do CDS de mercado ja vem negativo da planilha
+        - o premio do CDS de mercado ja vem com o sinal certo da planilha
         - a receita deseja vem positiva da planilha
         - o premio do CDS embutido na CLN eh calculado e retorna um valor positivo
     """
@@ -633,10 +654,10 @@ def f_auxiliar_cds_embutido(
     )
     """retorna o liquido da venda do CDS no mercado + compra do CDS embutido na CLN
     + Receita desejada"""
-    return cds_estimado + premio_CDS_mercado - receita_desejada
+    return premio_CDS_mercado - receita_desejada - cds_estimado
 
 
-def procura_preco_cds():
+def procura_preco_cds() -> None:
     """Retorna o Spread do CDS de tal forma que a diferenca com o premio do CDS de mercado
     seja igual aa receita desejada"""
     # nome da aba Debug e inicializa a linha de debug
@@ -720,13 +741,13 @@ def procura_preco_cds():
         )
 
     # premio do CDS de mercado - valor em moeda do up-front-cash
-    premio_CDS_mercado = aba_cashflow_CDS.range((27, coluna)).value
+    premio_CDS_mercado = aba_cashflow_CDS.range((28, coluna)).value
     # mostra no debug o premio do CDS de mercado
     linha_debug = ut.print_debug(
         "debug", linha_debug, f"premio mercado: {premio_CDS_mercado}", verbal_debug
     )
     # receita desejada em moeda
-    receita_desejada = aba_cashflow_CDS.range((54, coluna)).value
+    receita_desejada = aba_cashflow_CDS.range((55, coluna)).value
     # mostra no debug a receita desejada
     linha_debug = ut.print_debug(
         "debug", linha_debug, f"receita desejada: {receita_desejada}", verbal_debug
@@ -736,27 +757,34 @@ def procura_preco_cds():
     # procura o CDS Flat Spread embutido na CLN
 
     try:
-        # OLD: options = {"disp": False, "xtol": 0.10, "maxfev": 100}
-        options = {"disp": False, "maxiter": 100, "xtol": 0.000001, "maxfev": 100}
+        # define os parametros de tolerancia e maximo de iteracoes para a funcao opt.root
+        options: Any = {"disp": False, "xtol": 0.000001, "maxfev": 100}
+        # lista do outros parametros que serao passados para a funcao f_root
+        argumentos = (
+            trade_date,
+            setp_in_date,
+            settlement_date,
+            maturity_date,
+            running_coupon,
+            recovery_rate,
+            notional,
+            long_protection,
+            curva_OIS,
+            premio_CDS_mercado,
+            receita_desejada,
+            freq_type,
+            accrual_start_date,
+        )
+
+        # definindo a funcao que sera usada para achar a raiz do CDS embutido na CLN
+        def f_root(cds_flat_spread: np.ndarray, *args: Any) -> float:
+            return f_auxiliar_cds_embutido(float(cds_flat_spread[0]), *args)
+
         # procura a raiz
         resultado_root = opt.root(
-            f_auxiliar_cds_embutido,
+            f_root,
             x0=0.0123,
-            args=(
-                trade_date,
-                setp_in_date,
-                settlement_date,
-                maturity_date,
-                running_coupon,
-                recovery_rate,
-                notional,
-                long_protection,
-                curva_OIS,
-                premio_CDS_mercado,
-                receita_desejada,
-                freq_type,
-                accrual_start_date,
-            ),
+            args=argumentos,
             method="hybr",
             tol=0.000001,  # tolerance of 1 cent
             options=options,
@@ -768,9 +796,9 @@ def procura_preco_cds():
         # verifica se o resultado foi encontrado
         if resultado_root.success:
             # retorna o spread do CDS em bps = % * 10000
-            aba_cashflow_CDS.range((60, coluna)).value = resultado_root.x[0] * 10000
+            aba_cashflow_CDS.range((61, coluna)).value = resultado_root.x[0] * 10000
             # retorna o premio do CDS em moeda
-            aba_cashflow_CDS.range((59, coluna + 2)).value = -f_premio_cds(
+            aba_cashflow_CDS.range((60, coluna + 2)).value = -f_premio_cds(
                 resultado_root.x[0],
                 trade_date,
                 setp_in_date,
@@ -787,20 +815,20 @@ def procura_preco_cds():
         # nao achou nenhuma raiz
         else:
             # coloca a mensagem de erro
-            aba_cashflow_CDS.range((60, coluna)).value = (
+            aba_cashflow_CDS.range((61, coluna)).value = (
                 f"Error: no solution found. {resultado_root.message}"
             )
             # apaga o premio do CDS
-            aba_cashflow_CDS.range((59, coluna + 2)).clear_contents()
+            aba_cashflow_CDS.range((60, coluna + 2)).clear_contents()
 
     # deu algum erro esperado na busca da raiz / nos calculos numericos
     except (TypeError, ValueError, RuntimeError, ZeroDivisionError, OverflowError) as e:
         linha_debug = ut.print_debug("debug", linha_debug, f"error: {e}", verbal_debug)
-        aba_cashflow_CDS.range((60, coluna)).value = (
+        aba_cashflow_CDS.range((61, coluna)).value = (
             "Error: no solution found. See debug."
         )
         # apaga o premio do CDS
-        aba_cashflow_CDS.range((59, coluna + 2)).clear_contents()
+        aba_cashflow_CDS.range((60, coluna + 2)).clear_contents()
 
     # end
     linha_debug = ut.print_debug(

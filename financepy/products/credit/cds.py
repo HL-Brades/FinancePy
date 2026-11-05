@@ -27,7 +27,7 @@ from ...market.curves.cds_curve import CDSCurve
 
 USE_FLAT_HAZARD_RATE_INTEGRAL = True
 STANDARD_RECOVERY_RATE = 0.40
-GLOB_NUM_STEPS_PER_YEAR = 25
+GLOB_NUM_STEPS_PER_YEAR = 25 * 2
 ONE_BP = 0.0001
 ONE_PCT = 0.01
 
@@ -65,7 +65,7 @@ class CDS:
     ) -> None:
         """Create a CDS from the step-in date, maturity date and cpn"""
 
-        check_argument_types(self.__init__, locals())
+        check_argument_types(CDS.__init__, locals())
 
         if isinstance(maturity_dt_or_tenor, Date):
             maturity_dt = maturity_dt_or_tenor
@@ -90,12 +90,13 @@ class CDS:
         self.freq_type: FrequencyTypes = freq_type
         self.bd_type: BusDayAdjustTypes = bd_type
         # by HH
+        self.prev_coupon_dt: Date | None = None
         if prev_coupon_dt is None:
-            self.prev_coupon_dt: Date | None = None
+            self.prev_coupon_dt = None
         elif prev_coupon_dt > step_in_dt:
             raise FinError("Previous coupon date after step in date")
         else:
-            self.prev_coupon_dt: Date | None = prev_coupon_dt
+            self.prev_coupon_dte = prev_coupon_dt
 
         self._generate_adjusted_cds_payment_dts()
         self._calc_flows()
@@ -378,7 +379,7 @@ class CDS:
             num_steps_per_year,
         )
 
-        bump = 0.0001  # 1 basis point
+        bump = ONE_BP  # 1 basis point
 
         # we create a deep copy to avoid state issues
         bumped_issuer_curve = deepcopy(issuer_curve)
