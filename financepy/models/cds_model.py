@@ -102,7 +102,7 @@ def risky_pv01_numba(
         # this is the part of the cpn accrued from previous cpn date to now
         # accrual_factor_pcd_to_now = day_count.year_frac(pcd,teff)
         # reference credit survives to the premium payment date
-        dirty_rpv01 = q1 * z1 * year_fracs[1]
+        dirty_rpv01 = q1 * z1 * year_fracs[0]  # old: [1]
 
         # cpn accrued from previous cpn to today paid in full at default
         # before cpn payment

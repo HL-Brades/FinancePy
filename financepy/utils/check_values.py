@@ -1,5 +1,6 @@
 import numpy as np
-
+from numbers import Number
+from typing import Any, cast
 
 from .date import Date
 from .error import FinError
@@ -21,6 +22,7 @@ def check_currency(ccy_name: str) -> None:
     if ccy_name not in g_ccy_names:
         raise FinError(f"Unsupported currency: {ccy_name}")
 
+
 ###########################################################################
 
 
@@ -41,6 +43,7 @@ def check_currency_pair(ccy_pair: str) -> None:
     if ccy_1 == ccy_2:
         raise FinError("Currencies in pair must be different.")
 
+
 ###########################################################################
 
 
@@ -50,11 +53,13 @@ def check_curve_dt(anchor_dt: Date, *curves):
     for curve in curves:
         if curve.anchor_dt > anchor_dt:
             raise FinError(
-                f"{type(curve).__name__} valuation date {curve.anchor_dt} " f"is after valuation date {anchor_dt}."
+                f"{type(curve).__name__} valuation date {curve.anchor_dt} "
+                f"is after valuation date {anchor_dt}."
             )
 
 
 ###########################################################################
+
 
 def check_num_paths(num_paths: int):
 
@@ -62,9 +67,8 @@ def check_num_paths(num_paths: int):
         raise FinError("Number of paths must be at least 4.")
 
     if num_paths % 2 != 0:
-        raise FinError(
-            "Number of paths must be even when using antithetic variates."
-        )
+        raise FinError("Number of paths must be even when using antithetic variates.")
+
 
 ###########################################################################
 
@@ -130,6 +134,7 @@ def check_strike_price(strike_price: float):
 
 ########################################################################################
 
+
 def check_corr_matrix(
     corr_matrix: np.ndarray,
     num_assets: int,
@@ -172,25 +177,20 @@ def check_corr_matrix(
         raise FinError("Correlation matrix diagonal must equal one.")
 
     if np.any(np.abs(corr_matrix) > 1.0 + tol):
-        raise FinError(
-            "Correlation matrix entries must be between -1 and 1."
-        )
+        raise FinError("Correlation matrix entries must be between -1 and 1.")
 
     eigenvalues = np.linalg.eigvalsh(corr_matrix)
     min_eigenvalue = np.min(eigenvalues)
 
     if positive_definite:
         if min_eigenvalue <= tol:
-            raise FinError(
-                "Correlation matrix must be positive definite."
-            )
+            raise FinError("Correlation matrix must be positive definite.")
     elif min_eigenvalue < -tol:
-        raise FinError(
-            "Correlation matrix must be positive semi-definite."
-        )
+        raise FinError("Correlation matrix must be positive semi-definite.")
 
 
 ########################################################################################
+
 
 def check_shapes(*args):
     """Allow scalars and equal-length vectors."""
@@ -213,6 +213,24 @@ def check_shapes(*args):
 
             elif arg_shape != shape:
                 raise FinError("Vector arguments must have the same length.")
+
+
+########################################################################################
+def _check_positive_number(arg):
+    """Check that the argument is a number and positive."""
+    return bool(isinstance(arg, Number) and cast(Any, arg) > 0)
+
+
+def check_positive_numbers(*args):
+    """Check that all arguments are positive.
+    Accept scalars and arrays, return True if all arguments are positive, False otherwise.
+    """
+    for arg in args:
+        if not np.all(_check_positive_number(arg)):
+            # found a non-positive number or it is not a number, return False
+            return False
+    # default return True if all arguments are positive
+    return True
 
 
 ########################################################################################

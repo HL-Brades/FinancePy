@@ -4,10 +4,12 @@
 
 import numpy as np
 from scipy import optimize
+from typing import cast
 
 from ...utils.date import Date
 from ...utils.day_count import DayCountTypes
 from ...utils.error import FinError
+
 from ...utils.global_vars import G_DAYS_IN_YEAR
 from ...market.curves.discount_curve import DiscountCurve
 from ...market.curves.interpolator import _uinterpolate, InterpTypes
@@ -16,6 +18,8 @@ from ...utils.frequency import annual_frequency, FrequencyTypes
 from ...utils.helpers import check_argument_types, _func_name
 from ...utils.helpers import label_to_string
 from ...utils.global_vars import CLEAN
+from ...utils.day_count import DayCount
+from ...utils.check_values import check_positive_numbers
 
 # from numba import njit, float64
 
@@ -76,8 +80,8 @@ class CDSCurve:
         self.dc_type = dc_type
         self.built_ok = False
 
-        self._times = []
-        self._qs = []
+        self._times: np.ndarray = np.array([])
+        self._qs: np.ndarray = np.array([])
 
         if len(self.cds_contracts) > 0:
             self.build_curve()
@@ -86,13 +90,13 @@ class CDSCurve:
 
     ###########################################################################
 
-    def set_times(self, times: np.array):
+    def set_times(self, times: np.ndarray):
         """Set the times vector"""
         self._times = times
 
     ###########################################################################
 
-    def set_qs(self, qvector: np.array):
+    def set_qs(self, qvector: np.ndarray):
         """Set the survival probability curve"""
         self._qs = qvector
 
@@ -136,12 +140,17 @@ class CDSCurve:
         supports vectorisation."""
 
         if isinstance(dt, Date):
+            # old by HH:
             t = (dt - self.anchor_dt) / G_DAYS_IN_YEAR
+            # t, _, _ = DayCount(self.dc_type).year_frac(self.anchor_dt, dt)
         elif isinstance(dt, list):
-            t = np.array(dt)
+            t = np.array(dt, dtype=float)
+        elif check_positive_numbers(dt):
+            t = float(cast(float, dt))
         else:
-            t = dt
+            raise FinError("Unknown time type (1)")
 
+        # check if the time is negative, which would indicate a survival date before the curve anchor date
         if np.any(t < 0.0):
             raise FinError("Survival Date before curve anchor date")
 
@@ -149,15 +158,26 @@ class CDSCurve:
             n = len(t)
             qs = np.zeros(n)
             for i in range(n):
+                # verifica se um data ou um prazo em anos
+                if isinstance(dt, Date):
+                    # old by HH:
+                    t_i = (dt - self.anchor_dt) / G_DAYS_IN_YEAR
+                    # t_i, _, _ = DayCount(self.dc_type).year_frac(self.anchor_dt, dt)
+                elif check_positive_numbers(dt):
+                    t_i = float(cast(float, dt))
+                else:
+                    raise FinError("Unknown time type (2)")
+                # interpolates the survival probability for the given time t_i
                 qs[i] = _uinterpolate(
-                    t[i], self._times, self._qs, self.interp_method.value
+                    t_i, self._times, self._qs, self.interp_method.value
                 )
             return qs
-        elif np.isscalar(t):
-            q = _uinterpolate(t, self._times, self._qs, self.interp_method.value)
+        elif check_positive_numbers(t):
+            t_scalar = float(cast(float, t))
+            q = _uinterpolate(t_scalar, self._times, self._qs, self.interp_method.value)
             return q
 
-        raise FinError("Unknown time type")
+        raise FinError("Unknown time type (3)")
 
     ###########################################################################
 
@@ -166,7 +186,10 @@ class CDSCurve:
         function supports vectorisation."""
 
         if isinstance(dt, Date):
-            t = (dt - self.anchor_dt) / G_DAYS_IN_YEAR
+            # old by HH: t = (dt - self.anchor_dt) / G_DAYS_IN_YEAR
+            t, _, _ = DayCount(self.libor_curve.curve_dc_type).year_frac(
+                self.anchor_dt, dt
+            )
         elif isinstance(dt, list):
             t = np.array(dt)
         else:
@@ -204,7 +227,8 @@ class CDSCurve:
                 self.recovery_rate,
             )
 
-            t_mat = (maturity_dt - self.anchor_dt) / G_DAYS_IN_YEAR
+            # old by HH: t_mat = (maturity_dt - self.anchor_dt) / G_DAYS_IN_YEAR
+            t_mat, _, _ = DayCount(self.dc_type).year_frac(self.anchor_dt, maturity_dt)
             # previous survival probability is used as the initial guess for the next one
             q = self._qs[i]
 
@@ -212,6 +236,8 @@ class CDSCurve:
             self._times = np.append(self._times, t_mat)
             self._qs = np.append(self._qs, q)
 
+            # bracket the root of the function f by evaluating it at the minimum survival probability
+            # and the current guess for the survival probability
             q_lower = MIN_SURVIVAL_PROB
             q_upper = min(q, 1.0)
             pv_lower = f(q_lower, *argtuple)
@@ -235,7 +261,7 @@ class CDSCurve:
                     f"at maturity {maturity_dt}; clean PVs at the bounds are {pv_lower:.8g} and "
                     f"{pv_upper:.8g}."
                 )
-
+            # calibrate the survival probability for this CDS by finding the root of the function f
             q_star = optimize.brentq(
                 f,
                 q_lower,
@@ -244,8 +270,11 @@ class CDSCurve:
                 xtol=1e-12,
                 maxiter=50,
             )
-
+            # set the survival probability for this CDS to the calibrated value
             self.set_last_q(q_star)
+
+        # if we reach this point then the curve has been built successfully
+        self.built_ok = True
 
     ###########################################################################
 

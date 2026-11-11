@@ -27,7 +27,7 @@ from ...market.curves.cds_curve import CDSCurve
 
 USE_FLAT_HAZARD_RATE_INTEGRAL = True
 STANDARD_RECOVERY_RATE = 0.40
-GLOB_NUM_STEPS_PER_YEAR = 25 * 2
+GLOB_NUM_STEPS_PER_YEAR = 252  # 25 * 2
 ONE_BP = 0.0001
 ONE_PCT = 0.01
 
@@ -96,7 +96,7 @@ class CDS:
         elif prev_coupon_dt > step_in_dt:
             raise FinError("Previous coupon date after step in date")
         else:
-            self.prev_coupon_dte = prev_coupon_dt
+            self.prev_coupon_dt = prev_coupon_dt
 
         self._generate_adjusted_cds_payment_dts()
         self._calc_flows()
@@ -266,7 +266,9 @@ class CDS:
         check_curve_dt(value_dt, issuer_curve)
 
         # se for bullet CDS
-        if self.freq_type == FrequencyTypes.ZERO:
+        # old by HH: por enquanto o caso do bullet eh tratado como o caso padrao
+        # TODO: verificar se precisa ajustar para o caso bullet
+        if self.freq_type == 111:  # FrequencyTypes.ZERO:
             # Calculate the PV of the premium for bullet CDS
             dirty_pv, clean_pv = self.value_by_HH(
                 value_dt,
