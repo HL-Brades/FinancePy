@@ -22,7 +22,10 @@ from ...utils.check_values import check_curve_dt
 
 from ...utils.helpers import check_argument_types
 from ...models.cds_model import risky_pv01_numba
-from ...models.cds_model import prot_leg_pv_numba
+from ...models.cds_model import (
+    build_protection_integration_times,
+    prot_leg_pv_numba,
+)
 from ...market.curves.cds_curve import CDSCurve
 
 USE_FLAT_HAZARD_RATE_INTEGRAL = True
@@ -62,8 +65,13 @@ class CDS:
         dg_type: DateGenRuleTypes = DateGenRuleTypes.BACKWARD,
         # Previous coupon date for first accrual period
         prev_coupon_dt: Date | None = None,
+        protection_at_start_of_day: bool = True,  # para calcular da froma original: False,
     ) -> None:
-        """Create a CDS from the step-in date, maturity date and cpn"""
+        """Create a CDS from the step-in date, maturity date and coupon.
+
+        Set ``protection_at_start_of_day`` for the one-day credit-observation
+        date adjustment used by the ISDA standard model.
+        """
 
         check_argument_types(CDS.__init__, locals())
 
@@ -89,6 +97,7 @@ class CDS:
         self.cal_type: CalendarTypes | list | tuple = cal_type
         self.freq_type: FrequencyTypes = freq_type
         self.bd_type: BusDayAdjustTypes = bd_type
+        self.protection_at_start_of_day: bool = protection_at_start_of_day
         # by HH
         self.prev_coupon_dt: Date | None = None
         if prev_coupon_dt is None:
@@ -687,24 +696,54 @@ class CDS:
         fast NUMBA code that has been defined above."""
         check_curve_dt(value_dt, issuer_curve)
 
-        t_eff = (self.step_in_dt - value_dt) / G_DAYS_IN_YEAR
-        # An existing contract may have protection which as of now started in the past
-        # We need to ensure that looking forward the protection starts immediately
-        t_eff = max(t_eff, 0.0)
+        effective_dt = max(self.step_in_dt, value_dt)
+        maturity_dt = self.maturity_dt
+        if self.protection_at_start_of_day:
+            effective_dt = max(effective_dt.add_days(-1), value_dt)
+            maturity_dt = maturity_dt.add_days(-1)
 
-        t_mat = (self.maturity_dt - value_dt) / G_DAYS_IN_YEAR
+        anchor_dt = issuer_curve.anchor_dt
+        t_eff = (effective_dt - anchor_dt) / G_DAYS_IN_YEAR
+        t_mat = (maturity_dt - anchor_dt) / G_DAYS_IN_YEAR
+        if t_mat <= t_eff:
+            raise FinError("Protection end date must be after its start date.")
 
         libor_curve = issuer_curve.libor_curve
-
-        v = prot_leg_pv_numba(
+        # date arrays of all the contract dates that are relevant for the protection leg PV calculation
+        contract_dates = (
+            self.payment_dts
+            + self.accrual_start_dts
+            + self.accrual_end_dts
+            + [self.step_in_dt, self.maturity_dt]
+        )
+        if self.protection_at_start_of_day:
+            contract_dates += [date.add_days(-1) for date in contract_dates]
+        # time arrays, in years, of all the contract dates that are relevant for the protection
+        # leg PV calculation
+        contract_times = np.asarray(
+            [(date - anchor_dt) / G_DAYS_IN_YEAR for date in contract_dates],
+            dtype=np.float64,
+        )
+        # consolidate the time arrays of the libor curve, issuer curve, and contract dates into a
+        # single array of integration times
+        integration_times = build_protection_integration_times(
             t_eff,
             t_mat,
+            np.asarray(libor_curve._times, dtype=np.float64),
+            np.asarray(issuer_curve._times, dtype=np.float64),
+            contract_times,
+            num_steps_per_year,
+        )
+
+        # We call the NUMBA implementation of the protection leg PV calculation.
+        # This is a fast implementation that calculates the present value of the protection leg of a CDS
+        v = prot_leg_pv_numba(
+            integration_times,
             libor_curve._times,
             libor_curve._dfs,
             issuer_curve._times,
             issuer_curve._qs,
             contract_recovery_rate,
-            num_steps_per_year,
             prot_method,
             issuer_curve.interp_method.value,
         )
@@ -806,6 +845,7 @@ class CDS:
             libor_curve._dfs,
             issuer_curve._times,
             issuer_curve._qs,
+            1.0 / G_DAYS_IN_YEAR if self.protection_at_start_of_day else 0.0,
             pv01_method,
             issuer_curve.interp_method.value,
         )

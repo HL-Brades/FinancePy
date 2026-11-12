@@ -1,4 +1,3 @@
-#
 # Funcoes uteis para o projeto
 # @author: Hernan Lobert
 # Created on oct/2023
@@ -195,6 +194,6 @@ def _ensure_utc_datetime(value: dt.datetime | None) -> dt.datetime | None:
         return None
     # if it doesn't have a time zone set them force to be UTC
     elif value.tzinfo is None or value.utcoffset() is None:
-        return value.replace(tzinfo=dt.timezone.utc)
+        return value.replace(tzinfo=dt.UTC)
     # if it does have a time zone, return the orignal value
-    return value  # .astimezone(dt.timezone.utc)
+    return value  # .astimezone(dt.UTC)

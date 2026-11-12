@@ -140,6 +140,7 @@ cds_unique = CDS(
     freq_type=freq_type,
     accrual_dc_type=DayCountTypes.ACT_360,
     prev_coupon_dt=accrual_start_date,
+    protection_at_start_of_day=False,  # True,
 )
 # cria a curva de sobrevivencia com o vertice de CDS
 issuer_curve = CDSCurve(

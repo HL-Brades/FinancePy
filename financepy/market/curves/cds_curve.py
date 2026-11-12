@@ -141,7 +141,7 @@ class CDSCurve:
 
         if isinstance(dt, Date):
             # old by HH:
-            t = (dt - self.anchor_dt) / G_DAYS_IN_YEAR
+            t = float((dt - self.anchor_dt) / G_DAYS_IN_YEAR)
             # t, _, _ = DayCount(self.dc_type).year_frac(self.anchor_dt, dt)
         elif isinstance(dt, list):
             t = np.array(dt, dtype=float)
@@ -161,7 +161,7 @@ class CDSCurve:
                 # verifica se um data ou um prazo em anos
                 if isinstance(dt, Date):
                     # old by HH:
-                    t_i = (dt - self.anchor_dt) / G_DAYS_IN_YEAR
+                    t_i = float((dt - self.anchor_dt) / G_DAYS_IN_YEAR)
                     # t_i, _, _ = DayCount(self.dc_type).year_frac(self.anchor_dt, dt)
                 elif check_positive_numbers(dt):
                     t_i = float(cast(float, dt))

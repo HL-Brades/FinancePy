@@ -218,7 +218,7 @@ def check_shapes(*args):
 ########################################################################################
 def _check_positive_number(arg):
     """Check that the argument is a number and positive."""
-    return bool(isinstance(arg, Number) and cast(Any, arg) > 0)
+    return bool(isinstance(arg, Number) and cast(Any, arg) >= 0)
 
 
 def check_positive_numbers(*args):
