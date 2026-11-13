@@ -731,7 +731,7 @@ def procura_preco_cds() -> None:
     # recovery rate
     recovery_rate = aba_cashflow_CDS.range((25, coluna)).value
     # coupons' frequency - take the integer part of the value in the cell and convert to FrequencyTypes
-    freq_type = FrequencyTypes(int(aba_cashflow_CDS.range((7, coluna)).value))
+    freq_type = FrequencyTypes(int(aba_cashflow_CDS.range((27, coluna)).value))
     # data do inicio do accrual do cupom atual
     if aba_cashflow_CDS.range((21, coluna)).value is None:
         accrual_start_date = None
@@ -798,7 +798,7 @@ def procura_preco_cds() -> None:
             # retorna o spread do CDS em bps = % * 10000
             aba_cashflow_CDS.range((61, coluna)).value = resultado_root.x[0] * 10000
             # retorna o premio do CDS em moeda
-            aba_cashflow_CDS.range((60, coluna + 2)).value = -f_premio_cds(
+            aba_cashflow_CDS.range((60, coluna + 2)).value = f_premio_cds(
                 resultado_root.x[0],
                 trade_date,
                 setp_in_date,

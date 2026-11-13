@@ -65,7 +65,7 @@ class CDS:
         dg_type: DateGenRuleTypes = DateGenRuleTypes.BACKWARD,
         # Previous coupon date for first accrual period
         prev_coupon_dt: Date | None = None,
-        protection_at_start_of_day: bool = True,  # para calcular da froma original: False,
+        protection_at_start_of_day: bool = True,  # para calcular da forma original: False,
     ) -> None:
         """Create a CDS from the step-in date, maturity date and coupon.
 
